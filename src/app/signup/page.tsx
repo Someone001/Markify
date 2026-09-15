@@ -21,6 +21,9 @@ export default function SignUpPage() {
       const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
       })
 
       if (signUpError) {
@@ -38,98 +41,202 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 py-12 text-slate-100">
-      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 p-8 rounded-2xl shadow-2xl backdrop-blur-sm">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-600/20 text-indigo-400 font-bold text-xl border border-indigo-500/30 mb-3">
-            M
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Create an Account</h1>
-          <p className="text-sm text-slate-400 mt-1">Get started with Markify Attendance</p>
-        </div>
+    <div className="min-h-screen bg-background font-sans text-on-surface antialiased flex items-center justify-center p-4 sm:p-gutter lg:p-margin-lg selection:bg-primary-container selection:text-on-primary-container">
+      <div className="w-full max-w-6xl card-interactive bg-surface-container-lowest bg-[radial-gradient(ellipse_at_top_right,rgba(195,244,0,0.12),transparent_60%)] border border-outline-variant/40 rounded-3xl p-6 sm:p-space-xl shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden">
+        {/* Ambient Glow */}
+        <div className="absolute -top-24 -right-24 w-96 h-96 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-secondary/10 rounded-full blur-3xl pointer-events-none" />
 
-        {error && (
-          <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2">
-            <span className="font-semibold text-red-300">Error:</span>
-            <span>{error}</span>
-          </div>
-        )}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter-lg items-stretch w-full">
+          {/* LEFT SIDE: Brand & Enclave Registration Philosophy */}
+          <section className="lg:col-span-7 flex flex-col justify-between py-space-sm space-y-space-lg">
+            <div className="space-y-space-md">
+              {/* Badge */}
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-surface-container-high border border-primary/30 text-on-surface w-fit">
+                <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_#c3f400]" />
+                <span className="font-mono text-[9px] uppercase text-primary-fixed tracking-widest font-bold">
+                  PROCTOR REGISTRATION
+                </span>
+              </div>
 
-        {success ? (
-          <div className="p-6 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-4">
-            <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl">
-              ✓
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-white">Check your email to confirm</h2>
-              <p className="text-xs text-slate-300 mt-1">
-                We sent a confirmation link to <span className="font-medium text-emerald-300">{email}</span>. Please click the link to activate your account.
+              {/* Hero Typography */}
+              <h1 className="font-display text-3xl sm:text-5xl lg:text-6xl uppercase tracking-tighter text-white font-black leading-none">
+                CREATE OPERATOR{' '}
+                <span className="text-primary-fixed text-glow-lime">
+                  ACCOUNT.
+                </span>
+              </h1>
+              <p className="font-sans text-sm sm:text-base text-on-surface-variant max-w-xl leading-relaxed">
+                Register a new proctor account to manage student biometric enrollments, conduct live attendance capture, and view verifiable attendance logs.
               </p>
             </div>
-            <Link
-              href="/login"
-              className="inline-block mt-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition"
-            >
-              Back to Sign In
-            </Link>
-          </div>
-        ) : (
-          <form onSubmit={handleSignUp} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wider">
-                Email Address
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="instructor@markify.edu"
-                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
-              />
+
+            {/* Visual Reticle Box */}
+            <div className="relative w-full rounded-2xl bg-surface-container-low/70 border border-outline-variant/40 p-space-md overflow-hidden shadow-2xl">
+              <div className="relative flex flex-col justify-between h-44 sm:h-48 z-10 font-mono text-[10px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary font-semibold">SECURITY SPECIFICATION</span>
+                  <span className="px-2 py-0.5 rounded bg-surface-container-high text-primary-fixed font-bold border border-primary/30">
+                    CLIENT-SIDE
+                  </span>
+                </div>
+
+                <div className="self-center flex items-center justify-center relative w-20 h-20">
+                  <span className="absolute top-0 left-0 text-primary-fixed text-lg leading-none font-black drop-shadow-[0_0_8px_#c3f400]">⌜</span>
+                  <span className="absolute top-0 right-0 text-primary-fixed text-lg leading-none font-black drop-shadow-[0_0_8px_#c3f400]">⌝</span>
+                  <span className="absolute bottom-0 left-0 text-primary-fixed text-lg leading-none font-black drop-shadow-[0_0_8px_#c3f400]">⌞</span>
+                  <span className="absolute bottom-0 right-0 text-primary-fixed text-lg leading-none font-black drop-shadow-[0_0_8px_#c3f400]">⌟</span>
+                  <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center border border-primary/50 shadow-[0_0_16px_rgba(195,244,0,0.45)]">
+                    <span className="material-symbols-outlined text-primary-fixed text-base">key</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-on-surface-variant font-mono">
+                  <span>SHA-256 HASH CHAINS</span>
+                  <span className="text-secondary font-bold">BLINK LIVENESS DETECTION</span>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wider">
-                Password
-              </label>
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
-              />
-              <p className="text-[11px] text-slate-500 mt-1">Minimum 6 characters</p>
+            {/* Architecture Highlights */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
+              <div className="p-2.5 rounded-lg bg-surface-container-low text-center text-white border border-outline-variant/30">
+                128-D EMBEDDINGS
+              </div>
+              <div className="p-2.5 rounded-lg bg-surface-container-low text-center text-white border border-outline-variant/30">
+                SUPABASE RLS
+              </div>
+              <div className="p-2.5 rounded-lg bg-surface-container-low text-center text-white border border-outline-variant/30">
+                CSV EXPORT
+              </div>
             </div>
+          </section>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full mt-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium text-white shadow-lg shadow-indigo-600/30 transition text-sm flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                  <span>Registering...</span>
-                </>
-              ) : (
-                'Sign Up'
+          {/* RIGHT SIDE: Onboarding Form */}
+          <section className="lg:col-span-5 flex flex-col justify-between bg-surface-container-high/80 rounded-2xl p-6 sm:p-space-lg shadow-2xl relative z-20 border border-outline-variant/40">
+            <div className="space-y-space-md relative z-10">
+              <div className="flex items-center justify-between pb-space-xs border-b border-surface-container-high/60">
+                <div className="flex items-center space-x-2">
+                  <span className="w-2 h-2 rounded-full bg-primary-fixed shadow-[0_0_8px_#c3f400]" />
+                  <span className="font-display text-sm font-bold uppercase tracking-tight text-white">
+                    PROCTOR ONBOARDING
+                  </span>
+                </div>
+                <span className="font-mono text-[9px] text-secondary uppercase tracking-wider bg-surface-container-high px-2 py-0.5 rounded">
+                  NEW REGISTRATION
+                </span>
+              </div>
+
+              {error && (
+                <div className="p-3 rounded bg-error-container/40 border border-error/30 text-error text-xs flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[16px] flex-shrink-0">error</span>
+                  <span className="font-mono leading-relaxed">{error}</span>
+                </div>
               )}
-            </button>
-          </form>
-        )}
 
-        <div className="mt-6 text-center text-xs text-slate-400">
-          Already have an account?{' '}
-          <Link href="/login" className="text-indigo-400 hover:text-indigo-300 underline font-medium">
-            Sign In
-          </Link>
+              {success ? (
+                <div className="p-6 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-center space-y-4">
+                  <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-xl border border-emerald-500/40">
+                    ✓
+                  </div>
+                  <div>
+                    <h2 className="font-display text-base font-bold text-white uppercase tracking-tight">
+                      Confirmation Link Dispatched
+                    </h2>
+                    <p className="text-xs text-on-surface-variant mt-1.5 leading-relaxed">
+                      We sent a confirmation link to{' '}
+                      <span className="font-mono text-primary-fixed font-semibold">{email}</span>. Please verify your institutional address to activate proctor privileges.
+                    </p>
+                  </div>
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-surface-container-high hover:bg-surface-variant text-on-surface font-mono text-xs uppercase tracking-wider rounded border border-surface-container-highest transition"
+                  >
+                    <span>Proceed to Sign In</span>
+                    <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                  </Link>
+                </div>
+              ) : (
+                <form onSubmit={handleSignUp} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider block">
+                      INSTITUTIONAL_HANDLE // EMAIL
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="proctor@university.edu"
+                        className="w-full bg-surface-container-lowest text-white placeholder:text-surface-variant font-sans text-xs px-3.5 py-2.5 rounded border border-surface-container-high focus:outline-none focus:border-primary focus:text-white transition-all cursor-text relative z-10"
+                      />
+                      <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline-variant text-[16px] pointer-events-none select-none z-20">
+                        alternate_email
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider block">
+                      MASTER_CIPHER // PASSWORD (MIN 6 CHARS)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="password"
+                        required
+                        minLength={6}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••••••••••"
+                        className="w-full bg-surface-container-lowest text-white placeholder:text-surface-variant font-sans text-xs px-3.5 py-2.5 rounded border border-surface-container-high focus:outline-none focus:border-primary focus:text-white transition-all cursor-text relative z-10"
+                      />
+                      <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline-variant text-[16px] pointer-events-none select-none z-20">
+                        lock
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3.5 px-4 rounded-xl bg-primary text-black font-mono text-xs font-black uppercase tracking-wider hover:bg-primary/90 hover:scale-[1.01] active:scale-[0.99] shadow-[0_0_24px_rgba(195,244,0,0.4)] transition-all flex items-center justify-center space-x-2 disabled:opacity-50 mt-2 cursor-pointer relative z-10"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="w-3 h-3 rounded-full bg-black animate-ping" />
+                        <span>PROVISIONING ENCLAVE KEY...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>REGISTER PROCTOR KEY</span>
+                        <span className="material-symbols-outlined text-[16px] pointer-events-none">arrow_forward</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+
+              <div className="text-center pt-2 border-t border-surface-container-high/40">
+                <span className="font-mono text-[11px] text-on-surface-variant">
+                  Already have access?{' '}
+                </span>
+                <Link
+                  href="/login"
+                  className="font-mono text-[11px] text-primary-fixed hover:underline font-semibold"
+                >
+                  Sign In to Terminal
+                </Link>
+              </div>
+            </div>
+
+            <div className="mt-space-lg pt-space-xs border-t border-surface-container-high/40 text-left space-y-1 font-mono text-[10px]">
+              <div className="flex items-center space-x-1.5 text-on-surface-variant">
+                <span className="material-symbols-outlined text-[14px] text-primary-fixed">shield</span>
+                <span>Zero-Knowledge Authentication · Cryptographic Security</span>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>

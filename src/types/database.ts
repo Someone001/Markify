@@ -12,6 +12,8 @@ export type AttendanceStatus =
   | 'manual_override'
   | 'manual_fallback'
 
+export type SessionLocation = 'classroom' | 'canteen' | 'library' | 'auditorium'
+
 export interface Database {
   public: {
     Tables: {
@@ -43,18 +45,21 @@ export interface Database {
         Row: {
           id: string
           class_name: string
+          location: SessionLocation
           created_by: string | null
           created_at: string
         }
         Insert: {
           id?: string
           class_name: string
+          location?: SessionLocation
           created_by?: string | null
           created_at?: string
         }
         Update: {
           id?: string
           class_name?: string
+          location?: SessionLocation
           created_by?: string | null
           created_at?: string
         }

@@ -27,18 +27,19 @@ export default function LogoutButton() {
     <button
       onClick={handleLogout}
       disabled={loading}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-700 transition disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-surface-container-high hover:bg-surface-variant text-on-surface font-mono text-[11px] uppercase tracking-wider border border-outline-variant/40 hover:text-primary-fixed hover:border-primary-fixed/40 transition-all disabled:opacity-50"
+      title="Terminate secure session"
     >
       {loading ? (
         <span className="flex items-center gap-1.5">
-          <svg className="animate-spin h-3 w-3 text-slate-300" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-          Logging out...
+          <span className="w-2 h-2 rounded-full bg-primary-fixed animate-ping" />
+          <span>TERMINATING...</span>
         </span>
       ) : (
-        'Logout'
+        <span className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-[14px]">logout</span>
+          <span>DISCONNECT</span>
+        </span>
       )}
     </button>
   )

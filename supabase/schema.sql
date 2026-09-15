@@ -11,6 +11,7 @@ create table students (
 create table sessions (
   id uuid primary key default gen_random_uuid(),
   class_name text not null,
+  location text not null default 'classroom' check (location in ('classroom', 'canteen', 'library', 'auditorium')),
   created_by uuid references auth.users(id),
   created_at timestamptz default now()
 );
@@ -113,3 +114,11 @@ alter table attendance
     foreign key (student_id)
     references students(id)
     on delete cascade;
+
+-- 8. Migration: Add location column to sessions
+-- (Run this to add location support to an existing database)
+alter table sessions add column if not exists location text default 'classroom';
+update sessions set location = 'classroom' where location is null;
+alter table sessions alter column location set not null;
+alter table sessions drop constraint if exists check_session_location;
+alter table sessions add constraint check_session_location check (location in ('classroom', 'canteen', 'library', 'auditorium'));

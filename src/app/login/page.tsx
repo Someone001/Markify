@@ -39,76 +39,208 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 py-12 text-slate-100">
-      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 p-8 rounded-2xl shadow-2xl backdrop-blur-sm">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-600/20 text-indigo-400 font-bold text-xl border border-indigo-500/30 mb-3">
-            M
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Sign In to Markify</h1>
-          <p className="text-sm text-slate-400 mt-1">Smart Attendance Management System</p>
-        </div>
+    <div className="min-h-screen bg-background font-sans text-on-surface antialiased flex items-center justify-center p-4 sm:p-gutter lg:p-margin-lg selection:bg-primary-container selection:text-on-primary-container">
+      <div className="w-full max-w-6xl bg-surface-container-lowest bg-[radial-gradient(ellipse_at_top_right,rgba(195,244,0,0.12),transparent_60%)] border border-outline-variant/40 rounded-3xl p-6 sm:p-space-xl shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden">
+        {/* Ambient Glow */}
+        <div className="absolute -top-24 -right-24 w-96 h-96 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-secondary/10 rounded-full blur-3xl pointer-events-none" />
 
-        {error && (
-          <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2">
-            <span className="font-semibold text-red-300">Error:</span>
-            <span>{error}</span>
-          </div>
-        )}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter-lg items-stretch w-full">
+          {/* LEFT SIDE: Brand & Optical Reticle Hero */}
+          <section className="lg:col-span-7 flex flex-col justify-between py-space-sm space-y-space-lg">
+            <div className="space-y-space-md">
+              {/* Badge */}
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-surface-container-high border border-primary/30 text-on-surface w-fit">
+                <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_#c3f400]" />
+                <span className="font-mono text-[9px] uppercase text-primary-fixed tracking-widest font-bold">
+                  BIOMETRIC ATTENDANCE STUDIO
+                </span>
+              </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wider">
-              Email Address
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="instructor@markify.edu"
-              className="w-full px-3.5 py-2.5 rounded-lg bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
-            />
-          </div>
+              {/* Hero Typography */}
+              <h1 className="font-display text-3xl sm:text-5xl lg:text-6xl uppercase tracking-tighter text-white font-black leading-none">
+                ATTENDANCE AT THE{' '}
+                <span className="text-primary-fixed text-glow-lime">
+                  SPEED OF SIGHT.
+                </span>
+              </h1>
+              <p className="font-sans text-sm sm:text-base text-on-surface-variant max-w-xl leading-relaxed">
+                Facial recognition attendance management with client-side liveness detection and cryptographic hash-chain verification.
+              </p>
+            </div>
 
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5 uppercase tracking-wider">
-              Password
-            </label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full px-3.5 py-2.5 rounded-lg bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
-            />
-          </div>
+            {/* Signature Motif: Visual Reticle Box */}
+            <div className="relative w-full rounded-2xl bg-surface-container-low/70 border border-outline-variant/40 p-space-md overflow-hidden shadow-2xl">
+              {/* SVG Scanning Beam & Mesh */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-40" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="scanBeam" x1="0%" x2="0%" y1="0%" y2="100%">
+                    <stop offset="0%" stopColor="#c3f400" stopOpacity="0" />
+                    <stop offset="50%" stopColor="#c3f400" stopOpacity="0.8" />
+                    <stop offset="100%" stopColor="#c3f400" stopOpacity="0" />
+                  </linearGradient>
+                  <pattern id="meshGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+                    <circle cx="12" cy="12" r="0.75" fill="#00eefc" fillOpacity="0.3" />
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#meshGrid)" />
+                <rect x="0" y="0" width="100%" height="4" fill="url(#scanBeam)">
+                  <animate attributeName="y" values="-10;220;-10" dur="4.2s" repeatCount="indefinite" />
+                </rect>
+              </svg>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full mt-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium text-white shadow-lg shadow-indigo-600/30 transition text-sm flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-                <span>Signing In...</span>
-              </>
-            ) : (
-              'Sign In'
-            )}
-          </button>
-        </form>
+              {/* Reticle Inner Details */}
+              <div className="relative flex flex-col justify-between h-44 sm:h-48 z-10 font-mono text-[10px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary font-semibold">FACIAL RECOGNITION PIPELINE</span>
+                  <span className="px-2 py-0.5 rounded bg-surface-container-high text-primary-fixed font-bold border border-primary/30">
+                    REAL-TIME
+                  </span>
+                </div>
 
-        <div className="mt-6 text-center text-xs text-slate-400">
-          Don&apos;t have an account?{' '}
-          <Link href="/signup" className="text-indigo-400 hover:text-indigo-300 underline font-medium">
-            Create an account
-          </Link>
+                {/* Central Tracking Reticle Target */}
+                <div className="self-center flex items-center justify-center relative w-20 h-20">
+                  <span className="absolute top-0 left-0 text-primary-fixed text-lg leading-none select-none font-black drop-shadow-[0_0_8px_#c3f400]">⌜</span>
+                  <span className="absolute top-0 right-0 text-primary-fixed text-lg leading-none select-none font-black drop-shadow-[0_0_8px_#c3f400]">⌝</span>
+                  <span className="absolute bottom-0 left-0 text-primary-fixed text-lg leading-none select-none font-black drop-shadow-[0_0_8px_#c3f400]">⌞</span>
+                  <span className="absolute bottom-0 right-0 text-primary-fixed text-lg leading-none select-none font-black drop-shadow-[0_0_8px_#c3f400]">⌟</span>
+                  <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center border border-primary/50 shadow-[0_0_16px_rgba(195,244,0,0.45)]">
+                    <span className="material-symbols-outlined text-secondary text-base pointer-events-none">center_focus_strong</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-on-surface-variant font-mono">
+                  <span>128-D VECTOR MATCHING</span>
+                  <span>IMMUTABLE HASH-CHAIN LEDGER</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Architecture Highlights */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-[11px]">
+              <div className="p-2.5 rounded-lg bg-surface-container-low text-center text-white border border-outline-variant/30">
+                LIVENESS CHECK
+              </div>
+              <div className="p-2.5 rounded-lg bg-surface-container-low text-center text-white border border-outline-variant/30">
+                SHA-256 LEDGER
+              </div>
+              <div className="p-2.5 rounded-lg bg-surface-container-low text-center text-white border border-outline-variant/30 col-span-2 sm:col-span-1">
+                INSTANT EXPORT
+              </div>
+            </div>
+          </section>
+
+          {/* RIGHT SIDE: Tactical Auth Portal */}
+          <section className="lg:col-span-5 flex flex-col justify-between bg-surface-container-high/80 rounded-2xl p-6 sm:p-space-lg shadow-2xl relative z-20 border border-outline-variant/40">
+            <div className="space-y-space-md relative z-10">
+              {/* Card Header */}
+              <div className="flex items-center justify-between pb-space-xs border-b border-outline-variant/30">
+                <div className="flex items-center space-x-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-primary shadow-[0_0_10px_#c3f400]" />
+                  <span className="font-display text-base font-black uppercase tracking-tight text-white">
+                    LAB ACCESS
+                  </span>
+                </div>
+                <span className="font-mono text-[9px] text-secondary font-bold uppercase tracking-wider bg-surface-container-lowest px-2.5 py-1 rounded-full border border-secondary/30">
+                  PROCTOR AUTH // 01
+                </span>
+              </div>
+
+              {/* Error Banner */}
+              {error && (
+                <div className="p-3.5 rounded-xl bg-surface-container-highest border border-error/40 text-error-dim text-xs flex items-start gap-2 font-mono">
+                  <span className="material-symbols-outlined text-[16px] flex-shrink-0">error</span>
+                  <span className="leading-relaxed">{error}</span>
+                </div>
+              )}
+
+              {/* Login Form */}
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider block font-bold">
+                    INSTITUTIONAL_HANDLE // EMAIL
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="researcher@stanford.edu"
+                      className="w-full bg-surface-container-lowest text-white placeholder:text-on-surface-variant/50 font-sans text-xs px-4 py-3 rounded-xl border border-outline-variant focus:outline-none focus:border-primary focus:shadow-[0_0_15px_rgba(195,244,0,0.25)] transition-all cursor-text relative z-10"
+                    />
+                    <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline-variant text-[16px] pointer-events-none select-none z-20">
+                      alternate_email
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider block font-bold">
+                      SESSION_TOKEN // PASSWORD
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••••••••••"
+                      className="w-full bg-surface-container-lowest text-white placeholder:text-on-surface-variant/50 font-sans text-xs px-4 py-3 rounded-xl border border-outline-variant focus:outline-none focus:border-primary focus:shadow-[0_0_15px_rgba(195,244,0,0.25)] transition-all cursor-text relative z-10"
+                    />
+                    <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline-variant text-[16px] pointer-events-none select-none z-20">
+                      lock
+                    </span>
+                  </div>
+                </div>
+
+                {/* Primary CTA Button */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 px-5 rounded-xl bg-primary text-black font-mono text-xs font-black uppercase tracking-wider hover:bg-primary/90 hover:scale-[1.01] active:scale-[0.99] shadow-[0_0_25px_rgba(195,244,0,0.45)] hover:shadow-[0_0_35px_rgba(195,244,0,0.7)] transition-all flex items-center justify-center space-x-2 disabled:opacity-50 mt-2 cursor-pointer relative z-10"
+                >
+                  {loading ? (
+                    <>
+                      <span className="w-3 h-3 rounded-full bg-black animate-ping" />
+                      <span>INITIALIZING SECURE ENCLAVE...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>INITIALIZE SECURE WORKSPACE</span>
+                      <span className="material-symbols-outlined text-[16px] pointer-events-none">arrow_forward</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Link to Signup */}
+              <div className="text-center pt-2 border-t border-surface-container-high/40">
+                <span className="font-mono text-[11px] text-on-surface-variant">
+                  Need new operator credentials?{' '}
+                </span>
+                <Link
+                  href="/signup"
+                  className="font-mono text-[11px] text-primary-fixed hover:underline font-semibold"
+                >
+                  Register Enclave
+                </Link>
+              </div>
+            </div>
+
+            {/* Micro Security Telemetry Footer */}
+            <div className="mt-space-lg pt-space-xs border-t border-surface-container-high/40 text-left space-y-1 font-mono text-[10px]">
+              <div className="flex items-center space-x-1.5 text-on-surface-variant">
+                <span className="material-symbols-outlined text-[14px] text-primary-fixed">verified_user</span>
+                <span>FIDO2 / WebAuthn Compliant · Zero-Knowledge Encryption</span>
+              </div>
+              <p className="font-sans text-[11px] text-outline">
+                Biometric vectors never stored unhashed. Cryptographic SHA-256 signatures computed client-side.
+              </p>
+            </div>
+          </section>
         </div>
       </div>
     </div>

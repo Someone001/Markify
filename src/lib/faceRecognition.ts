@@ -125,4 +125,119 @@ export function isBlinkDetected(earBuffer: number[]): boolean {
   return absoluteBlink || (relativeDrop && reopened)
 }
 
+export interface ReticleOptions {
+  color?: string
+  label?: string
+  subLabel?: string
+  showCrosshair?: boolean
+  lineWidth?: number
+}
+
+/**
+ * Draws four L-shaped corner reticle brackets with a center crosshair and
+ * biometric tactical status badge matching the Stitch design system.
+ */
+export function drawCornerReticle(
+  ctx: CanvasRenderingContext2D,
+  box: { x: number; y: number; width: number; height: number },
+  options: ReticleOptions = {}
+): void {
+  const {
+    color = '#c3f400',
+    label,
+    subLabel,
+    showCrosshair = true,
+    lineWidth = 2.5,
+  } = options
+
+  const { x, y, width, height } = box
+  const arm = Math.max(16, Math.min(36, Math.min(width, height) * 0.22))
+
+  ctx.save()
+  ctx.strokeStyle = color
+  ctx.lineWidth = lineWidth
+  ctx.lineCap = 'square'
+  ctx.lineJoin = 'miter'
+  ctx.shadowColor = color
+  ctx.shadowBlur = 6
+
+  // 1. Four L-shaped corner brackets (⌜ ⌝ ⌞ ⌟)
+  ctx.beginPath()
+  // Top-Left corner
+  ctx.moveTo(x, y + arm)
+  ctx.lineTo(x, y)
+  ctx.lineTo(x + arm, y)
+
+  // Top-Right corner
+  ctx.moveTo(x + width - arm, y)
+  ctx.lineTo(x + width, y)
+  ctx.lineTo(x + width, y + arm)
+
+  // Bottom-Left corner
+  ctx.moveTo(x, y + height - arm)
+  ctx.lineTo(x, y + height)
+  ctx.lineTo(x + arm, y + height)
+
+  // Bottom-Right corner
+  ctx.moveTo(x + width - arm, y + height)
+  ctx.lineTo(x + width, y + height)
+  ctx.lineTo(x + width, y + height - arm)
+  ctx.stroke()
+
+  // 2. Center target crosshair
+  if (showCrosshair) {
+    const cx = x + width / 2
+    const cy = y + height / 2
+    const crossRadius = 7
+    const crossGap = 3
+
+    ctx.lineWidth = 1.5
+    ctx.shadowBlur = 4
+    ctx.beginPath()
+    // Horizontal
+    ctx.moveTo(cx - crossRadius, cy)
+    ctx.lineTo(cx - crossGap, cy)
+    ctx.moveTo(cx + crossGap, cy)
+    ctx.lineTo(cx + crossRadius, cy)
+    // Vertical
+    ctx.moveTo(cx, cy - crossRadius)
+    ctx.lineTo(cx, cy - crossGap)
+    ctx.moveTo(cx, cy + crossGap)
+    ctx.lineTo(cx, cy + crossRadius)
+    ctx.stroke()
+
+    // Micro center node dot
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.arc(cx, cy, 1.2, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // 3. Status Badge Label
+  if (label) {
+    ctx.shadowBlur = 0
+    ctx.font = '600 11px "JetBrains Mono", monospace, monospace'
+    const paddingX = 8
+    const badgeHeight = 20
+    const fullText = subLabel ? `${label} // ${subLabel}` : label
+    const textWidth = ctx.measureText(fullText).width
+    const badgeWidth = textWidth + paddingX * 2
+    const badgeY = Math.max(badgeHeight + 2, y - 4)
+
+    // Dark pill container
+    ctx.fillStyle = 'rgba(12, 14, 19, 0.94)'
+    ctx.fillRect(x, badgeY - badgeHeight, badgeWidth, badgeHeight)
+
+    // Left color bar accent
+    ctx.fillStyle = color
+    ctx.fillRect(x, badgeY - badgeHeight, 3, badgeHeight)
+
+    // Label text
+    ctx.fillStyle = color
+    ctx.fillText(fullText, x + paddingX + 1, badgeY - 6)
+  }
+
+  ctx.restore()
+}
+
 export { faceapi }
