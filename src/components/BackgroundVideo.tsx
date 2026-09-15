@@ -26,7 +26,7 @@ export default function BackgroundVideo() {
         muted
         playsInline
         preload="auto"
-        className="w-full h-full object-cover opacity-25 filter brightness-75 contrast-125 transition-opacity duration-1000"
+        className="w-full h-full object-cover opacity-40 filter brightness-75 contrast-125 transition-opacity duration-1000"
         style={{
           transform: 'translate3d(0, 0, 0)',
           willChange: 'transform',
@@ -36,8 +36,8 @@ export default function BackgroundVideo() {
       </video>
 
       {/* Atmospheric dark gradient mesh overlay for readability & contrast */}
-      <div className="absolute inset-0 bg-background/85 backdrop-blur-[0.5px]" />
-      <div className="absolute inset-0 bg-radial-vignette opacity-70" />
+      <div className="absolute inset-0 bg-background/60 backdrop-blur-[0.5px]" />
+      <div className="absolute inset-0 opacity-70" style={{ background: 'radial-gradient(ellipse at center, transparent 30%, #111319 100%)' }} />
     </div>
   )
 }

@@ -50,7 +50,7 @@ export default function RootLayout({
         className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} ${geistSans.variable} font-sans bg-background text-on-surface antialiased relative min-h-screen selection:bg-primary/30 selection:text-primary-fixed`}
       >
         <BackgroundVideo />
-        <div className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden">
+        <div className="fixed inset-0 pointer-events-none z-[9999]">
           <DotCursor />
         </div>
         {children}
