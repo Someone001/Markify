@@ -453,16 +453,29 @@ export default function StudentEnrollPage() {
 
   // Delete student
   const handleDeleteStudent = async (id: string, name: string, roll_no: string) => {
-    if (!confirm(`Are you sure you want to delete student "${name}" (${roll_no})?`)) return
+    // 2. Confirmation dialog before delete
+    if (!confirm(`This will also remove all attendance records for ${name}. Continue?`)) {
+      return
+    }
 
     setDeletingId(id)
     try {
       const supabase = createClient()
-      const { error } = await supabase.from('students').delete().eq('id', id)
-      if (error) throw error
 
-      showToast(`Student ${name} deleted successfully.`, 'success')
-      setStudents((prev) => prev.filter((s) => s.id !== id))
+      // Delete associated attendance rows first as defense-in-depth against foreign key constraints
+      const { error: attError } = await supabase.from('attendance').delete().eq('student_id', id)
+      if (attError) {
+        console.warn('Notice while deleting attendance rows for student:', attError.message)
+      }
+
+      // Delete the student record
+      const { error: studentError } = await supabase.from('students').delete().eq('id', id)
+      if (studentError) throw studentError
+
+      showToast(`Student ${name} (${roll_no}) deleted successfully.`, 'success')
+
+      // 3. Refresh the enrolled students list without a full page reload
+      await fetchStudents()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to delete student.'
       showToast(msg, 'error')

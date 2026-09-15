@@ -21,7 +21,7 @@ create type attendance_status as enum ('present', 'flagged_duplicate', 'manual_o
 -- 4. Attendance Table
 create table attendance (
   id uuid primary key default gen_random_uuid(),
-  student_id uuid references students(id),
+  student_id uuid references students(id) on delete cascade,
   session_id uuid references sessions(id),
   timestamp timestamptz default now(),
   confidence float,
@@ -104,3 +104,12 @@ create policy "Authenticated users can delete attendance"
   on attendance for delete
   to authenticated
   using (true);
+
+-- 7. Migration: Alter foreign key constraint to ON DELETE CASCADE
+-- (Run this if the table was already created without cascade)
+alter table attendance
+  drop constraint if exists attendance_student_id_fkey,
+  add constraint attendance_student_id_fkey
+    foreign key (student_id)
+    references students(id)
+    on delete cascade;

@@ -15,6 +15,8 @@ import {
   confirmAttendance,
   confirmManualOverride,
   confirmManualFallback,
+  verifySessionIntegrity,
+  type VerifyIntegrityResult,
 } from '@/lib/hashChain'
 import type { Student, Session, Attendance, AttendanceStatus } from '@/types/database'
 
@@ -83,6 +85,12 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
   // Needs Review (Manual Override for Low Confidence: 0.5 <= distance <= 0.6)
   const [reviewStudents, setReviewStudents] = useState<Record<string, ReviewItem>>({})
   const [processingOverrideId, setProcessingOverrideId] = useState<string | null>(null)
+
+  // CSV Export & Hash-Chain Integrity Verification
+  const [exportingCSV, setExportingCSV] = useState(false)
+  const [verifyingIntegrity, setVerifyingIntegrity] = useState(false)
+  const [integrityResult, setIntegrityResult] = useState<VerifyIntegrityResult | null>(null)
+  const [isIntegrityPanelOpen, setIsIntegrityPanelOpen] = useState(false)
 
   // Toast feedback
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null)
@@ -440,6 +448,92 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
       showToast('Error during roll call submission.', 'error')
     } finally {
       setSubmittingRollCall(false)
+    }
+  }
+
+  // Check if current user is the session creator
+  const isCreator = Boolean(currentUserId && session?.created_by && currentUserId === session.created_by)
+
+  // PART A — Export CSV Handler
+  const handleExportCSV = async () => {
+    try {
+      setExportingCSV(true)
+      const supabase = createClient()
+      const { data: rows, error } = await supabase
+        .from('attendance')
+        .select('*, students(name, roll_no)')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+
+      if (!rows || rows.length === 0) {
+        showToast('No attendance records to export for this session.', 'info')
+        return
+      }
+
+      // Format CSV with columns: Roll No, Name, Status, Timestamp, Confidence, Hash
+      const headers = ['Roll No', 'Name', 'Status', 'Timestamp', 'Confidence', 'Hash']
+      const csvLines = [headers.join(',')]
+
+      for (const r of rows) {
+        const studentInfo = r.students as { name?: string; roll_no?: string } | null
+        const rollNo = `"${(studentInfo?.roll_no || 'N/A').replace(/"/g, '""')}"`
+        const name = `"${(studentInfo?.name || 'Unknown').replace(/"/g, '""')}"`
+        const status = r.status || 'present'
+        const timestamp = r.timestamp || r.created_at || ''
+        const confidence = r.confidence !== null && r.confidence !== undefined ? r.confidence : 'N/A'
+        const hash = r.hash || ''
+
+        csvLines.push([rollNo, name, status, timestamp, confidence, hash].join(','))
+      }
+
+      const csvContent = csvLines.join('\r\n')
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+
+      const cleanClassName = (session?.class_name || 'session')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+      const dateStr = new Date().toISOString().split('T')[0]
+      const fileName = `attendance_${cleanClassName}_${dateStr}.csv`
+
+      const link = document.createElement('a')
+      link.setAttribute('href', url)
+      link.setAttribute('download', fileName)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      showToast(`Exported ${fileName}`, 'success')
+    } catch (err: unknown) {
+      console.error('Error exporting CSV:', err)
+      const msg = err instanceof Error ? err.message : 'Failed to export CSV'
+      showToast(msg, 'error')
+    } finally {
+      setExportingCSV(false)
+    }
+  }
+
+  // PART B — Hash-Chain Integrity Verification Handler
+  const handleVerifyIntegrity = async () => {
+    try {
+      setVerifyingIntegrity(true)
+      const result = await verifySessionIntegrity(sessionId)
+      setIntegrityResult(result)
+      setIsIntegrityPanelOpen(true)
+      if (result.verified) {
+        showToast(result.message, 'success')
+      } else {
+        showToast(`Integrity check failed: ${result.failures.length} tampered record(s)`, 'error')
+      }
+    } catch (err: unknown) {
+      console.error('Verification error:', err)
+      showToast('Failed to run chain verification', 'error')
+    } finally {
+      setVerifyingIntegrity(false)
     }
   }
 
@@ -802,8 +896,8 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
           </h1>
         </div>
 
-        {/* Mode Toggle Button & Stats */}
-        <div className="flex items-center gap-3">
+        {/* Mode Toggle Button, CSV Export, Verification & Stats */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs">
             <span className="text-slate-400">Total Enrolled:</span>
             <span className="font-semibold text-white">{students.length}</span>
@@ -829,8 +923,172 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
           >
             {isDegradedMode ? 'Switch to Camera Mode' : 'Switch to Manual Roll Call'}
           </button>
+
+          {/* PART A: Export CSV Button */}
+          <button
+            onClick={handleExportCSV}
+            disabled={exportingCSV}
+            id="export-csv-button"
+            className="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white text-xs font-medium transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+            title="Download full attendance records as CSV"
+          >
+            <span>📥</span>
+            <span>{exportingCSV ? 'Exporting...' : 'Export CSV'}</span>
+          </button>
+
+          {/* PART B: Verify Log Integrity Button (Visible ONLY to Session Creator) */}
+          {isCreator && (
+            <button
+              onClick={handleVerifyIntegrity}
+              disabled={verifyingIntegrity}
+              id="verify-chain-button"
+              className="px-3 py-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 text-xs font-medium transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              title="Verify SHA-256 hash-chain integrity of this session"
+            >
+              <span>🛡️</span>
+              <span>{verifyingIntegrity ? 'Verifying Chain...' : 'Verify Log Integrity'}</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* PART B: HASH-CHAIN INTEGRITY RESULT PANEL */}
+      {isIntegrityPanelOpen && integrityResult && (
+        <div
+          id="integrity-result-panel"
+          className={`p-5 rounded-2xl border transition-all animate-in fade-in slide-in-from-top-2 duration-200 ${
+            integrityResult.verified
+              ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-100 shadow-lg shadow-emerald-950/20'
+              : 'bg-rose-950/40 border-rose-500/50 text-rose-100 shadow-lg shadow-rose-950/30'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg font-bold flex-shrink-0 ${
+                  integrityResult.verified
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse'
+                }`}
+              >
+                {integrityResult.verified ? '✓' : '⚠️'}
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  <span>{integrityResult.message}</span>
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  {integrityResult.verified
+                    ? 'Cryptographic SHA-256 signatures and backward-linkage pointers verified for all records in this session.'
+                    : 'Database tampering or record manipulation detected! Stored ledger hashes or chain pointers do not match cryptographic recomputation.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-center">
+              <button
+                type="button"
+                onClick={handleVerifyIntegrity}
+                disabled={verifyingIntegrity}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium text-white transition flex items-center gap-1"
+              >
+                <span>🔄</span>
+                <span>Re-verify</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsIntegrityPanelOpen(false)}
+                className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-300 transition"
+              >
+                ✕ Dismiss
+              </button>
+            </div>
+          </div>
+
+          {/* Clean Verification Assurance Specs */}
+          {integrityResult.verified && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 text-xs">
+              <div className="p-2.5 rounded-xl bg-slate-900/60 border border-emerald-500/20 flex items-center gap-2.5">
+                <span className="text-emerald-400 text-base">🔒</span>
+                <div>
+                  <div className="font-semibold text-white">SHA-256 Signatures Valid</div>
+                  <div className="text-[11px] text-slate-400">All {integrityResult.totalRecords} record payloads intact</div>
+                </div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-900/60 border border-emerald-500/20 flex items-center gap-2.5">
+                <span className="text-emerald-400 text-base">🔗</span>
+                <div>
+                  <div className="font-semibold text-white">Chain Continuity Valid</div>
+                  <div className="text-[11px] text-slate-400">Zero broken prev_hash links</div>
+                </div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-900/60 border border-emerald-500/20 flex items-center gap-2.5">
+                <span className="text-emerald-400 text-base">🛡️</span>
+                <div>
+                  <div className="font-semibold text-white">Reorder &amp; Deletion Proof</div>
+                  <div className="text-[11px] text-slate-400">Ledger sequence verified</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tampering List (when verification fails) */}
+          {!integrityResult.verified && integrityResult.failures.length > 0 && (
+            <div className="mt-4 space-y-3">
+              <div className="text-xs font-bold text-rose-300 uppercase tracking-wider">
+                Compromised Records ({integrityResult.failures.length}):
+              </div>
+
+              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                {integrityResult.failures.map((fail) => (
+                  <div
+                    key={fail.rowId}
+                    className="p-3.5 rounded-xl bg-slate-950/90 border border-rose-500/30 text-xs space-y-2"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-white/5 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono text-[10px] font-bold">
+                          Row #{fail.index}
+                        </span>
+                        <span className="font-semibold text-white">{fail.studentName}</span>
+                        <span className="font-mono text-indigo-300 text-[11px]">({fail.rollNo})</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+                          {fail.status}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono">
+                        ID: {fail.rowId.slice(0, 8)}...
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {fail.failures.map((f, idx) => (
+                        <div key={idx} className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/20 text-[11px] space-y-1">
+                          <div className="flex items-center gap-2 font-bold text-rose-300">
+                            <span>❌</span>
+                            <span>{f.type === 'hash_mismatch' ? 'Hash Mismatch (Payload altered)' : 'Chain-Link Mismatch (Pointer broken)'}</span>
+                          </div>
+                          <p className="text-slate-300 text-[11px]">{f.message}</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1.5 pt-1.5 border-t border-rose-500/10 font-mono text-[10px]">
+                            <div className="p-2 rounded bg-black/50 text-slate-300 break-all">
+                              <span className="text-slate-500 block font-sans font-semibold mb-0.5">Stored in Supabase DB:</span>
+                              <span className="text-rose-400 font-mono">{f.storedValue || 'null'}</span>
+                            </div>
+                            <div className="p-2 rounded bg-black/50 text-slate-300 break-all">
+                              <span className="text-slate-500 block font-sans font-semibold mb-0.5">Expected by Hash Chain:</span>
+                              <span className="text-emerald-400 font-mono">{f.expectedValue || 'null'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
