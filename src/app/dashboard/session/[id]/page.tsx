@@ -11,16 +11,22 @@ import {
   EAR_BLINK_THRESHOLD,
   faceapi,
 } from '@/lib/faceRecognition'
-import { confirmAttendance } from '@/lib/hashChain'
-import type { Student, Session, Attendance } from '@/types/database'
+import {
+  confirmAttendance,
+  confirmManualOverride,
+  confirmManualFallback,
+} from '@/lib/hashChain'
+import type { Student, Session, Attendance, AttendanceStatus } from '@/types/database'
 
 interface ConfirmedItem {
   student: Student
   attendanceRecord?: Attendance
   confirmedAt: Date
-  confidence: number
+  confidence: number | null
+  status: AttendanceStatus
   hash?: string
   prevHash?: string | null
+  overriddenBy?: string | null
 }
 
 interface WaitingItem {
@@ -32,6 +38,15 @@ interface WaitingItem {
   isEyesClosed: boolean
 }
 
+interface ReviewItem {
+  student: Student
+  firstSeen: number
+  lastSeen: number
+  confidence: number
+  distance: number
+  selectedStudentId: string
+}
+
 export default function SessionLivePage({ params }: { params: { id: string } }) {
   const sessionId = params.id
 
@@ -40,6 +55,7 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
   const [students, setStudents] = useState<Student[]>([])
   const [loadingInitial, setLoadingInitial] = useState(true)
   const [modelsReady, setModelsReady] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   // Camera & Detection state
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -48,6 +64,12 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [detectedFacesCount, setDetectedFacesCount] = useState(0)
   const [fps, setFps] = useState(0)
+
+  // Degraded Mode (Fallback to Manual Roll Call)
+  const [isDegradedMode, setIsDegradedMode] = useState(false)
+  const [degradedReason, setDegradedReason] = useState<string | null>(null)
+  const [checklistSelection, setChecklistSelection] = useState<Record<string, boolean>>({})
+  const [submittingRollCall, setSubmittingRollCall] = useState(false)
 
   // Attendance tracking state
   const [confirmedRecords, setConfirmedRecords] = useState<ConfirmedItem[]>([])
@@ -58,6 +80,10 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
   const [waitingStudents, setWaitingStudents] = useState<Record<string, WaitingItem>>({})
   const earBuffersRef = useRef<Map<string, number[]>>(new Map())
 
+  // Needs Review (Manual Override for Low Confidence: 0.5 <= distance <= 0.6)
+  const [reviewStudents, setReviewStudents] = useState<Record<string, ReviewItem>>({})
+  const [processingOverrideId, setProcessingOverrideId] = useState<string | null>(null)
+
   // Toast feedback
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null)
 
@@ -65,7 +91,7 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
     setToast({ message, type })
     setTimeout(() => {
       setToast((prev) => (prev?.message === message ? null : prev))
-    }, 4000)
+    }, 4500)
   }, [])
 
   // Audio chime for confirmation
@@ -77,8 +103,8 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
       const osc = audioCtx.createOscillator()
       const gain = audioCtx.createGain()
       osc.type = 'sine'
-      osc.frequency.setValueAtTime(523.25, audioCtx.currentTime) // C5
-      osc.frequency.exponentialRampToValueAtTime(783.99, audioCtx.currentTime + 0.12) // G5
+      osc.frequency.setValueAtTime(523.25, audioCtx.currentTime)
+      osc.frequency.exponentialRampToValueAtTime(783.99, audioCtx.currentTime + 0.12)
       gain.gain.setValueAtTime(0.2, audioCtx.currentTime)
       gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.28)
       osc.connect(gain)
@@ -86,19 +112,23 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
       osc.start()
       osc.stop(audioCtx.currentTime + 0.28)
     } catch {
-      // Audio not allowed without prior interaction
+      // Audio not allowed without interaction
     }
   }, [])
 
-  // 1. Load Models on Mount
+  // 1. Load Models on Mount with graceful degradation catch
   useEffect(() => {
     let active = true
     async function initModels() {
       try {
         await loadModels()
         if (active) setModelsReady(true)
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Failed to load face detection models:', err)
+        if (active) {
+          setIsDegradedMode(true)
+          setDegradedReason('Face recognition models failed to load. Switched to manual roll call.')
+        }
       }
     }
     initModels()
@@ -114,6 +144,14 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
       setLoadingInitial(true)
       try {
         const supabase = createClient()
+
+        // Get current user id
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (user && active) {
+          setCurrentUserId(user.id)
+        }
 
         // Fetch Session Details
         const { data: sessionData, error: sessionErr } = await supabase
@@ -153,9 +191,11 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
                 student: studentMap.get(att.student_id)!,
                 attendanceRecord: att,
                 confirmedAt: new Date(att.timestamp || att.created_at),
-                confidence: Math.round((att.confidence || 0.9) * 100),
+                confidence: att.confidence !== null ? Math.round(att.confidence * 100) : null,
+                status: att.status as AttendanceStatus,
                 hash: att.hash,
                 prevHash: att.prev_hash,
+                overriddenBy: att.overridden_by,
               })
             }
           }
@@ -174,7 +214,7 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
     }
   }, [sessionId])
 
-  // 3. Start Webcam
+  // 3. Start Webcam with Try/Catch for Degraded Mode Fallback
   const startCamera = useCallback(async () => {
     setCameraError(null)
     try {
@@ -195,11 +235,16 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         setStreamActive(true)
+        setIsDegradedMode(false)
+        setDegradedReason(null)
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to access camera.'
+      const msg = err instanceof Error ? err.message : 'Camera unavailable or permission denied.'
+      console.warn('Camera initialization notice:', msg)
       setCameraError(msg)
       setStreamActive(false)
+      setIsDegradedMode(true)
+      setDegradedReason('Camera unavailable or permission denied — switched to manual roll call.')
     }
   }, [])
 
@@ -220,15 +265,15 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
   }, [])
 
   useEffect(() => {
-    if (modelsReady && !loadingInitial) {
+    if (modelsReady && !loadingInitial && !isDegradedMode) {
       startCamera()
     }
     return () => {
       stopCamera()
     }
-  }, [modelsReady, loadingInitial, startCamera, stopCamera])
+  }, [modelsReady, loadingInitial, isDegradedMode, startCamera, stopCamera])
 
-  // Liveness Confirmation Handler (Writes to Supabase with SHA-256 Hash Chain)
+  // Liveness Attendance Confirmation (status='present')
   const handleConfirmAttendance = useCallback(
     async (student: Student, confidence: number) => {
       if (confirmedStudentIdsRef.current.has(student.id)) return
@@ -249,6 +294,7 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
             attendanceRecord: result.record,
             confirmedAt: new Date(),
             confidence,
+            status: 'present',
             hash: result.record?.hash,
             prevHash: result.record?.prev_hash,
           }
@@ -259,9 +305,14 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
             delete copy[student.id]
             return copy
           })
+          setReviewStudents((prev) => {
+            const copy = { ...prev }
+            delete copy[student.id]
+            return copy
+          })
 
           playChime()
-          showToast(`Liveness verified: ${student.name} confirmed present!`, 'success')
+          showToast(`Liveness verified: ${student.name} marked present!`, 'success')
         } else {
           showToast(`Error confirming ${student.name}: ${result.error}`, 'error')
         }
@@ -274,8 +325,128 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
     [sessionId, playChime, showToast]
   )
 
-  // 4. Fast Detection & Recognition Loop with EAR Blink Liveness
+  // PART A — Manual Override Confirmation (status='manual_override')
+  const handleConfirmManualOverride = async (reviewKey: string) => {
+    const item = reviewStudents[reviewKey]
+    if (!item) return
+
+    const targetStudentId = item.selectedStudentId
+    if (targetStudentId === 'skip') {
+      // Dismiss review item
+      setReviewStudents((prev) => {
+        const copy = { ...prev }
+        delete copy[reviewKey]
+        return copy
+      })
+      showToast('Dismissed review item.', 'info')
+      return
+    }
+
+    const targetStudent = students.find((s) => s.id === targetStudentId)
+    if (!targetStudent) return
+
+    setProcessingOverrideId(reviewKey)
+
+    try {
+      const confDecimal = item.confidence / 100
+      const result = await confirmManualOverride(
+        targetStudentId,
+        sessionId,
+        confDecimal,
+        currentUserId || ''
+      )
+
+      if (result.success) {
+        confirmedStudentIdsRef.current.add(targetStudentId)
+        earBuffersRef.current.delete(targetStudentId)
+
+        const newConfirmed: ConfirmedItem = {
+          student: targetStudent,
+          attendanceRecord: result.record,
+          confirmedAt: new Date(),
+          confidence: item.confidence,
+          status: 'manual_override',
+          hash: result.record?.hash,
+          prevHash: result.record?.prev_hash,
+          overriddenBy: currentUserId,
+        }
+
+        setConfirmedRecords((prev) => [newConfirmed, ...prev.filter((r) => r.student.id !== targetStudentId)])
+        setReviewStudents((prev) => {
+          const copy = { ...prev }
+          delete copy[reviewKey]
+          return copy
+        })
+
+        playChime()
+        showToast(`Manual override confirmed for ${targetStudent.name}!`, 'success')
+      } else {
+        showToast(`Error saving override: ${result.error}`, 'error')
+      }
+    } catch (err) {
+      console.error('Manual override error:', err)
+      showToast('Failed to save manual override.', 'error')
+    } finally {
+      setProcessingOverrideId(null)
+    }
+  }
+
+  // PART B — Manual Fallback Roll-Call Submission (status='manual_fallback')
+  const handleSubmitRollCall = async () => {
+    const selectedIds = Object.entries(checklistSelection)
+      .filter(([id, selected]) => selected && !confirmedStudentIdsRef.current.has(id))
+      .map(([id]) => id)
+
+    if (selectedIds.length === 0) {
+      showToast('Please select at least one unmarked student.', 'info')
+      return
+    }
+
+    setSubmittingRollCall(true)
+
+    try {
+      let successCount = 0
+
+      for (const studentId of selectedIds) {
+        const student = students.find((s) => s.id === studentId)
+        if (!student) continue
+
+        const result = await confirmManualFallback(studentId, sessionId, currentUserId || '')
+
+        if (result.success) {
+          confirmedStudentIdsRef.current.add(studentId)
+          successCount++
+
+          const newConfirmed: ConfirmedItem = {
+            student,
+            attendanceRecord: result.record,
+            confirmedAt: new Date(),
+            confidence: null,
+            status: 'manual_fallback',
+            hash: result.record?.hash,
+            prevHash: result.record?.prev_hash,
+            overriddenBy: currentUserId,
+          }
+
+          setConfirmedRecords((prev) => [newConfirmed, ...prev.filter((r) => r.student.id !== studentId)])
+        }
+      }
+
+      playChime()
+      showToast(`Roll call submitted: ${successCount} student(s) marked present.`, 'success')
+      setChecklistSelection({})
+    } catch (err) {
+      console.error('Roll call submit error:', err)
+      showToast('Error during roll call submission.', 'error')
+    } finally {
+      setSubmittingRollCall(false)
+    }
+  }
+
+  // 4. Detection & Recognition Loop with Multi-Face, Blink Liveness, and Low-Confidence Borderline Handling
   useEffect(() => {
+    if (isDegradedMode) return
+
     let isMounted = true
     let isProcessing = false
     let frameCount = 0
@@ -307,7 +478,6 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
       isProcessing = true
 
       try {
-        // Track processing FPS
         frameCount++
         const now = performance.now()
         if (now - lastFpsTime >= 1000) {
@@ -316,7 +486,7 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
           lastFpsTime = now
         }
 
-        // Detect all faces with landmarks and descriptors
+        // Detect all faces
         const detections = await faceapi
           .detectAllFaces(
             video,
@@ -329,6 +499,7 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
         ctx.clearRect(0, 0, canvas.width, canvas.height)
 
         const currentFrameWaiting: Record<string, WaitingItem> = {}
+        const currentFrameReview: Record<string, ReviewItem> = {}
 
         if (detections.length > 0) {
           const resizedDetections = faceapi.resizeResults(detections, displaySize)
@@ -351,19 +522,29 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
               }
             }
 
-            const isMatch = minDistance < 0.5 && bestMatch !== null
+            // Console log raw distance for closest match on every detection cycle
+            const categoryLabel =
+              minDistance < 0.5
+                ? 'GREEN (<0.50 match)'
+                : minDistance <= 0.6
+                ? 'BLUE (0.50-0.60 low-confidence review)'
+                : 'RED (>0.60 unknown)'
 
-            if (isMatch && bestMatch) {
+            console.log(
+              `[Face Match] Name: "${bestMatch?.name || 'None'}" (${bestMatch?.roll_no || '-'}) | Raw Dist: ${minDistance === Infinity ? 'Infinity' : minDistance.toFixed(4)} | Category: ${categoryLabel}`
+            )
+
+            // CASE 1: High Confidence Match (distance < 0.50) -> Green/Amber
+            if (minDistance < 0.5 && bestMatch) {
               const studentId = bestMatch.id
               const isAlreadyConfirmed = confirmedStudentIdsRef.current.has(studentId)
 
-              // Compute Eye Aspect Ratio (EAR) for liveness
               const ear = calculateEAR(landmarks)
               const confidence = Math.max(0, Math.min(100, Math.round((1 - minDistance / 0.6) * 100)))
               const isEyesClosed = ear < EAR_BLINK_THRESHOLD
 
               if (isAlreadyConfirmed) {
-                // CASE 1: ALREADY CONFIRMED PRESENT -> Green Box
+                // Confirmed Present -> Green Box
                 ctx.strokeStyle = '#10b981'
                 ctx.lineWidth = 3
                 ctx.strokeRect(box.x, box.y, box.width, box.height)
@@ -377,20 +558,17 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
                 ctx.fillStyle = '#ffffff'
                 ctx.fillText(label, box.x + 7, tagY - 6)
               } else {
-                // CASE 2: MATCHED BUT NOT CONFIRMED YET -> Buffer EAR & Check for Blink
+                // Buffer EAR & Check Blink
                 const buffer = earBuffersRef.current.get(studentId) || []
                 buffer.push(ear)
                 if (buffer.length > 20) buffer.shift()
                 earBuffersRef.current.set(studentId, buffer)
 
-                // Detect Blink using robust absolute & relative drop criteria
                 const hasBlink = isBlinkDetected(buffer)
 
                 if (hasBlink) {
-                  // Blink detected! Liveness confirmed!
                   earBuffersRef.current.delete(studentId)
 
-                  // Render confirmation box
                   ctx.strokeStyle = '#10b981'
                   ctx.lineWidth = 4
                   ctx.strokeRect(box.x, box.y, box.width, box.height)
@@ -404,10 +582,8 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
                   ctx.fillStyle = '#ffffff'
                   ctx.fillText(label, box.x + 7, tagY - 6)
 
-                  // Trigger asynchronous hash-chain write
                   handleConfirmAttendance(bestMatch, confidence)
                 } else if (isEyesClosed) {
-                  // Eyes currently closed -> Cyan Box (Visual immediate feedback!)
                   currentFrameWaiting[studentId] = {
                     student: bestMatch,
                     firstSeen: Date.now(),
@@ -430,7 +606,6 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
                   ctx.fillStyle = '#083344'
                   ctx.fillText(label, box.x + 7, tagY - 6)
                 } else {
-                  // Eyes open, waiting for blink -> Amber Box
                   currentFrameWaiting[studentId] = {
                     student: bestMatch,
                     firstSeen: Date.now(),
@@ -444,14 +619,6 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
                   ctx.lineWidth = 3
                   ctx.strokeRect(box.x, box.y, box.width, box.height)
 
-                  // Corner indicators
-                  ctx.fillStyle = '#fbbf24'
-                  const cs = 7
-                  ctx.fillRect(box.x - 2, box.y - 2, cs, cs)
-                  ctx.fillRect(box.x + box.width - cs + 2, box.y - 2, cs, cs)
-                  ctx.fillRect(box.x - 2, box.y + box.height - cs + 2, cs, cs)
-                  ctx.fillRect(box.x + box.width - cs + 2, box.y + box.height - cs + 2, cs, cs)
-
                   const label = `${bestMatch.name} (${bestMatch.roll_no}) - Blink eyes to confirm (EAR: ${ear.toFixed(2)})`
                   ctx.font = 'bold 12px sans-serif'
                   const textWidth = ctx.measureText(label).width
@@ -462,13 +629,52 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
                   ctx.fillText(label, box.x + 7, tagY - 6)
                 }
               }
-            } else {
-              // CASE 3: UNKNOWN FACE -> Red Box
+            }
+            // CASE 2: Borderline Low Confidence Match (0.50 <= distance <= 0.60) -> Distinct Blue Box & Needs Review
+            else if (minDistance <= 0.6 && bestMatch) {
+              const studentId = bestMatch.id
+              const confidence = Math.max(0, Math.min(100, Math.round((1 - minDistance / 0.6) * 100)))
+
+              // Distinct Blue Box for Low Confidence / Needs Review
+              ctx.strokeStyle = '#3b82f6'
+              ctx.lineWidth = 3
+              ctx.strokeRect(box.x, box.y, box.width, box.height)
+
+              // Corner pins
+              ctx.fillStyle = '#60a5fa'
+              const cs = 7
+              ctx.fillRect(box.x - 2, box.y - 2, cs, cs)
+              ctx.fillRect(box.x + box.width - cs + 2, box.y - 2, cs, cs)
+              ctx.fillRect(box.x - 2, box.y + box.height - cs + 2, cs, cs)
+              ctx.fillRect(box.x + box.width - cs + 2, box.y + box.height - cs + 2, cs, cs)
+
+              const label = `Low confidence - tap to confirm (${confidence}%) [d: ${minDistance.toFixed(2)}]`
+              ctx.font = 'bold 12px sans-serif'
+              const textWidth = ctx.measureText(label).width
+              const tagY = Math.max(22, box.y)
+              ctx.fillStyle = 'rgba(37, 99, 235, 0.95)'
+              ctx.fillRect(box.x, tagY - 22, textWidth + 14, 22)
+              ctx.fillStyle = '#ffffff'
+              ctx.fillText(label, box.x + 7, tagY - 6)
+
+              currentFrameReview[studentId] = {
+                student: bestMatch,
+                firstSeen: Date.now(),
+                lastSeen: Date.now(),
+                confidence,
+                distance: minDistance,
+                selectedStudentId: studentId,
+              }
+            }
+            // CASE 3: Unknown Face (distance > 0.60) -> Red Box
+            // CASE 3: Unknown Face (distance > 0.60) -> Red Box
+            else {
               ctx.strokeStyle = '#ef4444'
               ctx.lineWidth = 3
               ctx.strokeRect(box.x, box.y, box.width, box.height)
 
-              const label = 'Unknown Face'
+              const distStr = minDistance === Infinity ? '' : ` [d: ${minDistance.toFixed(2)}]`
+              const label = `Unknown Face${distStr}`
               ctx.font = 'bold 12px sans-serif'
               const textWidth = ctx.measureText(label).width
               const tagY = Math.max(22, box.y)
@@ -494,6 +700,28 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
           }
           return updated
         })
+
+        // Update review list (retain user's selected dropdown choice if already modified)
+        setReviewStudents((prev) => {
+          const updated = { ...prev }
+          for (const [id, item] of Object.entries(currentFrameReview)) {
+            if (updated[id]) {
+              updated[id] = {
+                ...item,
+                selectedStudentId: updated[id].selectedStudentId || item.selectedStudentId,
+              }
+            } else {
+              updated[id] = item
+            }
+          }
+          const now = Date.now()
+          for (const [id, item] of Object.entries(updated)) {
+            if (now - item.lastSeen > 15000) {
+              delete updated[id]
+            }
+          }
+          return updated
+        })
       } catch {
         // Ignore transient frame parsing errors
       } finally {
@@ -501,7 +729,6 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
       }
     }
 
-    // High-cadence loop: executes next cycle with a minimal 50ms pause
     let timeoutId: NodeJS.Timeout
     const loop = async () => {
       if (!isMounted) return
@@ -519,14 +746,15 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
       isMounted = false
       clearTimeout(timeoutId)
     }
-  }, [streamActive, modelsReady, students, handleConfirmAttendance])
+  }, [streamActive, modelsReady, students, isDegradedMode, handleConfirmAttendance])
 
   const waitingList = Object.values(waitingStudents).filter(
     (w) => !confirmedStudentIdsRef.current.has(w.student.id)
   )
+  const reviewList = Object.entries(reviewStudents)
 
   return (
-    <div className="space-y-6 pb-16">
+    <div className="space-y-6 pb-16 font-sans">
       {/* Toast Notification */}
       {toast && (
         <div
@@ -548,7 +776,7 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
         </div>
       )}
 
-      {/* Top Breadcrumb & Session Bar */}
+      {/* Top Header & Breadcrumb Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
@@ -560,130 +788,299 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-3">
             <span>{session?.class_name || 'Live Attendance Session'}</span>
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Liveness Active
-            </span>
+            {isDegradedMode ? (
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                Degraded Mode: Manual Roll Call
+              </span>
+            ) : (
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                AI Live Scanning Active
+              </span>
+            )}
           </h1>
         </div>
 
+        {/* Mode Toggle Button & Stats */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs">
-            <span className="text-slate-400">Enrolled in DB:</span>
-            <span className="font-semibold text-white">{students.length} students</span>
+            <span className="text-slate-400">Total Enrolled:</span>
+            <span className="font-semibold text-white">{students.length}</span>
           </div>
+
+          <button
+            onClick={() => {
+              if (isDegradedMode) {
+                setIsDegradedMode(false)
+                setDegradedReason(null)
+                startCamera()
+              } else {
+                stopCamera()
+                setIsDegradedMode(true)
+                setDegradedReason('Switched to manual roll call mode by instructor.')
+              }
+            }}
+            className={`px-3 py-1.5 rounded-xl border text-xs font-medium transition ${
+              isDegradedMode
+                ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-600/30'
+                : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white'
+            }`}
+          >
+            {isDegradedMode ? 'Switch to Camera Mode' : 'Switch to Manual Roll Call'}
+          </button>
         </div>
       </div>
 
-      {/* Main Grid: Video Stream + Live Present Sidebar */}
+      {/* Main Content Area */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left: Video Viewport */}
+        {/* Left Area: Either Webcam Viewport OR Degraded Mode Fallback Checklist */}
         <div className="lg:col-span-8 space-y-4">
-          <div className="relative aspect-video w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center">
-            {cameraError ? (
-              <div className="text-center p-6 space-y-2">
-                <div className="text-red-400 text-3xl mb-2">📷</div>
-                <h3 className="text-sm font-semibold text-white">Camera Access Error</h3>
-                <p className="text-xs text-slate-400 max-w-sm">{cameraError}</p>
-                <button
-                  onClick={startCamera}
-                  className="mt-3 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition"
-                >
-                  Retry Camera
-                </button>
+          {isDegradedMode ? (
+            /* PART B: DEGRADED MODE FALLBACK UI */
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+                <span className="text-xl">⚠️</span>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-amber-300">
+                    Camera unavailable — switched to manual roll call
+                  </h3>
+                  <p className="text-xs text-amber-200/70 mt-0.5">
+                    {degradedReason || 'Camera access or face models unavailable. Mark attendance manually using the checklist below.'}
+                  </p>
+                </div>
               </div>
-            ) : (
-              <>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-                <canvas
-                  ref={canvasRef}
-                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-                />
 
-                {/* Floating Telemetry Badges */}
-                <div className="absolute top-3 left-3 flex items-center gap-2">
-                  <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-950/80 backdrop-blur-md border border-slate-700/60 text-xs">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        detectedFacesCount > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+              {/* Checklist Actions */}
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="text-xs text-slate-400">
+                  Select students present and click &quot;Submit Roll Call&quot;
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const all: Record<string, boolean> = {}
+                      students.forEach((s) => {
+                        if (!confirmedStudentIdsRef.current.has(s.id)) {
+                          all[s.id] = true
+                        }
+                      })
+                      setChecklistSelection(all)
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition"
+                  >
+                    Select All Unmarked
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChecklistSelection({})}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {/* Student Checklist Table */}
+              <div className="overflow-y-auto max-h-[460px] divide-y divide-slate-800/60 border border-slate-800 rounded-xl bg-slate-950/60">
+                {students.map((student) => {
+                  const isAlreadyMarked = confirmedStudentIdsRef.current.has(student.id)
+                  const isChecked = checklistSelection[student.id] || false
+
+                  return (
+                    <div
+                      key={student.id}
+                      onClick={() => {
+                        if (!isAlreadyMarked) {
+                          setChecklistSelection((prev) => ({
+                            ...prev,
+                            [student.id]: !prev[student.id],
+                          }))
+                        }
+                      }}
+                      className={`p-3 flex items-center justify-between gap-3 transition cursor-pointer ${
+                        isAlreadyMarked
+                          ? 'opacity-50 cursor-not-allowed bg-slate-900/40'
+                          : isChecked
+                          ? 'bg-indigo-950/30'
+                          : 'hover:bg-slate-800/30'
                       }`}
-                    />
-                    <span className="text-slate-200 font-medium">
-                      {detectedFacesCount} {detectedFacesCount === 1 ? 'Face' : 'Faces'}
-                    </span>
-                  </div>
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <input
+                          type="checkbox"
+                          disabled={isAlreadyMarked}
+                          checked={isAlreadyMarked || isChecked}
+                          onChange={(e) => {
+                            if (!isAlreadyMarked) {
+                              setChecklistSelection((prev) => ({
+                                ...prev,
+                                [student.id]: e.target.checked,
+                              }))
+                            }
+                          }}
+                          className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <div>
+                          <span className="text-xs font-semibold text-white block truncate">
+                            {student.name}
+                          </span>
+                          <span className="text-[10px] font-mono text-indigo-400">
+                            {student.roll_no}
+                          </span>
+                        </div>
+                      </div>
 
-                  {fps > 0 && (
-                    <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-950/80 backdrop-blur-md border border-indigo-700/60 text-[11px] text-indigo-300 font-mono">
-                      <span>⚡ {fps} FPS</span>
+                      <div>
+                        {isAlreadyMarked ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-medium">
+                            ✓ Already Confirmed
+                          </span>
+                        ) : isChecked ? (
+                          <span className="text-[11px] text-indigo-400 font-medium">Ready to Submit</span>
+                        ) : (
+                          <span className="text-[11px] text-slate-500">Unmarked</span>
+                        )}
+                      </div>
                     </div>
+                  )
+                })}
+              </div>
+
+              {/* Submit Roll Call Button */}
+              <button
+                type="button"
+                onClick={handleSubmitRollCall}
+                disabled={
+                  submittingRollCall ||
+                  Object.values(checklistSelection).filter(Boolean).length === 0
+                }
+                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-semibold text-white shadow-lg shadow-indigo-600/30 transition text-sm flex items-center justify-center gap-2"
+              >
+                {submittingRollCall ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>Saving Hash-Chained Roll Call...</span>
+                  </>
+                ) : (
+                  `Submit Roll Call (${Object.values(checklistSelection).filter(Boolean).length} Selected)`
+                )}
+              </button>
+            </div>
+          ) : (
+            /* CAMERA VIEWPORT */
+            <>
+              <div className="relative aspect-video w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center">
+                {cameraError ? (
+                  <div className="text-center p-6 space-y-2">
+                    <div className="text-red-400 text-3xl mb-2">📷</div>
+                    <h3 className="text-sm font-semibold text-white">Camera Access Error</h3>
+                    <p className="text-xs text-slate-400 max-w-sm">{cameraError}</p>
+                    <button
+                      onClick={startCamera}
+                      className="mt-3 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition"
+                    >
+                      Retry Camera
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
+                    <canvas
+                      ref={canvasRef}
+                      className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                    />
+
+                    {/* Telemetry Badge */}
+                    <div className="absolute top-3 left-3 flex items-center gap-2">
+                      <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-950/80 backdrop-blur-md border border-slate-700/60 text-xs">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            detectedFacesCount > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                          }`}
+                        />
+                        <span className="text-slate-200 font-medium">
+                          {detectedFacesCount} {detectedFacesCount === 1 ? 'Face' : 'Faces'}
+                        </span>
+                      </div>
+
+                      {fps > 0 && (
+                        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-950/80 backdrop-blur-md border border-indigo-700/60 text-[11px] text-indigo-300 font-mono">
+                          <span>⚡ {fps} FPS</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bottom Legend */}
+                    <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between text-[11px] px-3 py-1.5 rounded-xl bg-slate-950/85 backdrop-blur-md border border-slate-800 text-slate-300 gap-2">
+                      <div className="flex items-center gap-3">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" />
+                          Blink to Confirm
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-sm bg-blue-500" />
+                          Low Confidence (Needs Review)
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
+                          Confirmed
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-sm bg-red-500" />
+                          Unknown
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Camera Controls */}
+              <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800 p-3 rounded-xl text-xs">
+                <div className="flex items-center gap-3">
+                  {streamActive ? (
+                    <button
+                      type="button"
+                      onClick={stopCamera}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                    >
+                      Pause Camera
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
+                    >
+                      Resume Camera
+                    </button>
                   )}
                 </div>
 
-                {/* Bottom Overlay Legend */}
-                <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between text-[11px] px-3 py-1.5 rounded-xl bg-slate-950/85 backdrop-blur-md border border-slate-800 text-slate-300 gap-2">
-                  <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" />
-                      Waiting for Blink
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400" />
-                      Eyes Closed
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-                      Confirmed
-                    </span>
-                  </div>
-
-                  <span className="text-slate-400 font-mono text-[10px]">
-                    Blink / Close eyes briefly
-                  </span>
+                <div className="text-slate-400 text-[11px]">
+                  Borderline matches (0.5–0.6 dist) are highlighted in blue for instructor verification.
                 </div>
-              </>
-            )}
-          </div>
-
-          {/* Camera Controls & Security Tip */}
-          <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800 p-3 rounded-xl text-xs">
-            <div className="flex items-center gap-3">
-              {streamActive ? (
-                <button
-                  type="button"
-                  onClick={stopCamera}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-                >
-                  Pause Stream
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
-                >
-                  Resume Stream
-                </button>
-              )}
-            </div>
-
-            <div className="text-slate-400 text-[11px] flex items-center gap-1.5">
-              <span>💡 Tip:</span>
-              <span className="text-slate-300">Blink naturally or close eyes for ~0.5s. You can also manually confirm in the sidebar.</span>
-            </div>
-          </div>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Right: Live Attendance Sidebar */}
+        {/* Right Area: Sidebar containing Needs Review, Waiting for Blink, and Confirmed Records */}
         <div className="lg:col-span-4 space-y-4">
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col h-full min-h-[500px]">
-            {/* Sidebar Header */}
+            {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
               <div>
                 <h2 className="text-base font-bold text-white flex items-center gap-2">
@@ -705,9 +1102,101 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
               </div>
             </div>
 
-            {/* List Containers */}
+            {/* Scrollable Container */}
             <div className="flex-1 overflow-y-auto space-y-4 max-h-[560px] pr-1">
-              {/* SECTION A: Waiting for Blink */}
+              {/* PART A: NEEDS REVIEW (Low Confidence: 0.5 <= dist <= 0.6) */}
+              {reviewList.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-blue-400 uppercase tracking-wider px-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                      Needs Review — Low Confidence ({reviewList.length})
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {reviewList.map(([key, item]) => (
+                      <div
+                        key={key}
+                        className="p-3 bg-blue-950/30 border border-blue-500/40 rounded-xl space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-semibold text-white block">
+                              Borderline Match ({item.confidence}%)
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              Distance: {item.distance.toFixed(3)} (0.50 - 0.60)
+                            </span>
+                          </div>
+
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            Needs Review
+                          </span>
+                        </div>
+
+                        {/* Student Selector Dropdown */}
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-1">
+                            Assign to Student:
+                          </label>
+                          <select
+                            value={item.selectedStudentId}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setReviewStudents((prev) => ({
+                                ...prev,
+                                [key]: { ...prev[key], selectedStudentId: val },
+                              }))
+                            }}
+                            className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded text-xs text-white focus:outline-none focus:border-blue-500"
+                          >
+                            <option value={item.student.id}>
+                              {item.student.name} ({item.student.roll_no}) [Closest Match]
+                            </option>
+                            <option disabled>──────────</option>
+                            {students
+                              .filter((s) => s.id !== item.student.id)
+                              .map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name} ({s.roll_no})
+                                </option>
+                              ))}
+                            <option value="skip">✕ Not a match / Skip</option>
+                          </select>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReviewStudents((prev) => {
+                                const copy = { ...prev }
+                                delete copy[key]
+                                return copy
+                              })
+                            }}
+                            className="px-2.5 py-1 rounded text-[11px] text-slate-400 hover:text-white transition"
+                          >
+                            Dismiss
+                          </button>
+                          <button
+                            type="button"
+                            disabled={processingOverrideId === key}
+                            onClick={() => handleConfirmManualOverride(key)}
+                            className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-medium transition shadow-sm disabled:opacity-50"
+                          >
+                            {processingOverrideId === key ? 'Saving...' : 'Confirm Override'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION: Waiting for Blink (Confident Matches) */}
               {waitingList.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-[11px] font-semibold text-amber-400 uppercase tracking-wider px-1">
@@ -747,7 +1236,6 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
                           </button>
                         </div>
 
-                        {/* Live EAR Meter */}
                         <div className="mt-2 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
                           <span className={item.isEyesClosed ? 'text-cyan-400 font-semibold' : 'text-amber-300'}>
                             {item.isEyesClosed ? '😑 Eyes Closed detected!' : '👁️ Blink eyes now'}
@@ -762,7 +1250,7 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
                 </div>
               )}
 
-              {/* SECTION B: Confirmed Present Students */}
+              {/* SECTION: Confirmed Records */}
               <div className="space-y-2">
                 <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider px-1">
                   Confirmed Present ({confirmedRecords.length})
@@ -773,7 +1261,7 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
                     <div className="text-2xl opacity-40">👤</div>
                     <p className="text-xs font-medium text-slate-300">No confirmed attendance yet</p>
                     <p className="text-[11px] text-slate-500 max-w-xs">
-                      Look into the camera and blink naturally to complete liveness verification.
+                      Students will appear here once verified via camera blink or manual roll call.
                     </p>
                   </div>
                 ) : (
@@ -793,14 +1281,28 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-2.5 mt-1 text-[10px] text-slate-400">
-                            <span className="text-emerald-400 font-medium flex items-center gap-1">
-                              <span>✓</span> Present
-                            </span>
-                            <span>•</span>
-                            <span>{record.confidence}% match</span>
-                            <span>•</span>
-                            <span>
+                          {/* Distinct Status Badges */}
+                          <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px]">
+                            {record.status === 'manual_override' ? (
+                              <span className="text-blue-400 font-medium px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">
+                                👤 Manually confirmed by admin
+                              </span>
+                            ) : record.status === 'manual_fallback' ? (
+                              <span className="text-purple-400 font-medium px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">
+                                📋 Manual Roll Call
+                              </span>
+                            ) : (
+                              <span className="text-emerald-400 font-medium flex items-center gap-1">
+                                <span>✓</span> Liveness Verified
+                              </span>
+                            )}
+
+                            {record.confidence !== null && (
+                              <span className="text-slate-400">{record.confidence}%</span>
+                            )}
+
+                            <span className="text-slate-500">•</span>
+                            <span className="text-slate-400">
                               {record.confirmedAt.toLocaleTimeString([], {
                                 hour: '2-digit',
                                 minute: '2-digit',
@@ -816,7 +1318,7 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
                           )}
                         </div>
 
-                        <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold border border-emerald-500/30">
+                        <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold border border-emerald-500/30 flex-shrink-0">
                           ✓
                         </div>
                       </div>
