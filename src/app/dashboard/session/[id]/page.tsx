@@ -68,8 +68,8 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
   const [detectedFacesCount, setDetectedFacesCount] = useState(0)
   const [fps, setFps] = useState(0)
 
-  // Degraded Mode (Fallback to Manual Roll Call)
-  const [isDegradedMode, setIsDegradedMode] = useState(false)
+  // Degraded Mode (Default to Manual Roll Call for instantaneous, zero-lag performance)
+  const [isDegradedMode, setIsDegradedMode] = useState(true)
   const [degradedReason, setDegradedReason] = useState<string | null>(null)
   const [checklistSelection, setChecklistSelection] = useState<Record<string, boolean>>({})
   const [submittingRollCall, setSubmittingRollCall] = useState(false)
@@ -125,8 +125,9 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
     }
   }, [])
 
-  // 1. Load Models on Mount with graceful degradation catch
+  // 1. Lazy load models only when switching from Manual to Camera Mode
   useEffect(() => {
+    if (isDegradedMode || modelsReady) return
     let active = true
     async function initModels() {
       try {
@@ -144,7 +145,7 @@ export default function SessionLivePage({ params }: { params: { id: string } }) 
     return () => {
       active = false
     }
-  }, [])
+  }, [isDegradedMode, modelsReady])
 
   // 2. Fetch Session, Enrolled Students, and Existing Attendance from Supabase
   useEffect(() => {

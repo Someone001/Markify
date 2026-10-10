@@ -54,8 +54,9 @@ export default function StudentEnrollPage() {
     }, 4500)
   }, [])
 
-  // Load face-api.js models on mount
+  // Lazy load models only when activeTab is live
   useEffect(() => {
+    if (activeTab !== 'live' || modelsReady) return
     let mounted = true
     async function init() {
       try {
@@ -68,8 +69,7 @@ export default function StudentEnrollPage() {
       } catch (err: unknown) {
         if (mounted) {
           setLoadingModels(false)
-          showToast('Failed to load face detection models. Please check network/assets.', 'error')
-          console.error('Model load error:', err)
+          console.error('Model load notice:', err)
         }
       }
     }
@@ -77,7 +77,7 @@ export default function StudentEnrollPage() {
     return () => {
       mounted = false
     }
-  }, [showToast])
+  }, [activeTab, modelsReady])
 
   // Fetch enrolled students
   const fetchStudents = useCallback(async () => {
