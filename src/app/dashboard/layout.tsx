@@ -13,14 +13,16 @@ export default async function DashboardLayout({
   const cookieStore = cookies()
   const mockUserCookie = cookieStore.get('mock_user')?.value
 
-  let currentUser = mockUserCookie ? { email: mockUserCookie } : null
+  let currentUser: { email?: string } | null = mockUserCookie ? { email: mockUserCookie } : null
 
   if (!currentUser) {
     const supabase = createClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    currentUser = user
+    if (user) {
+      currentUser = { email: user.email }
+    }
   }
 
   if (!currentUser) {
