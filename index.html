@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markify — AI Face Attendance System</title>
+
+    <!-- Offline-first face-api with CDN fallback -->
+    <script src="assets/face-api.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js';"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="role-faculty">
+
+    <div class="bg-circuit"></div>
+    <div class="bg-code-layer" id="bg-code-layer"></div>
+
+    <!-- Decorative background video -->
+    <div class="top-watermark" aria-hidden="true">
+        <video class="top-watermark-video" src="assets/bg-loop.mp4" autoplay muted loop playsinline></video>
+    </div>
+
+    <!-- Top Navigation & Role Bar -->
+    <div class="top-nav-bar">
+        <div class="nav-brand">
+            <div class="logo-wrap">
+                <img src="assets/markify-logo.png" onerror="this.style.display='none'" class="nav-logo" alt="Logo">
+                <span class="brand-text">Markify<span class="badge-ai">AI PRO</span></span>
+            </div>
+            <span class="campus-tag">SSPU · Pune</span>
+        </div>
+
+        <div class="demo-quick-bar">
+            <span class="demo-label">⚡ Judge Quick-Switch:</span>
+            <button class="btn-demo-pill active" id="demo-btn-faculty" title="Switch to Faculty/Admin Portal">👨‍🏫 Faculty</button>
+            <button class="btn-demo-pill" id="demo-btn-student" title="Switch to Student Portal View">🎓 Student View</button>
+            <button class="btn-demo-pill highlight" id="demo-btn-data" title="Load sample students & lectures for live demo">⚡ Load Demo Data</button>
+        </div>
+
+        <div class="user-profile-menu">
+            <div class="user-avatar" id="user-avatar">👨‍🏫</div>
+            <div class="user-details">
+                <span class="user-name" id="user-display-name">Prof. A. Sharma</span>
+                <span class="user-role-badge" id="user-role-badge">Faculty Portal</span>
+            </div>
+            <button id="auth-toggle-btn" class="btn-auth-switch" title="Switch Account / Logout">Logout</button>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         FACULTY / ADMIN PORTAL VIEW
+         ========================================================================= -->
+    <div id="faculty-portal-view" class="portal-view active">
+        <div class="top-header">
+            <div class="brand">
+                <span class="brand-eyebrow">Smart AI Attendance Verification Engine</span>
+                <div class="brand-title">
+                    <h1>Real-Time Face Scanner</h1>
+                </div>
+            </div>
+            <div class="header-right-tools">
+                <div id="live-clock"><span id="clock-date">—</span><strong id="clock-time">--:--:--</strong></div>
+                <div class="audio-control-wrap">
+                    <button id="audio-toggle-btn" class="btn-icon-tool active" title="Audio Chime & Speech Feedback">🔊 Audio: ON</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lecture Selection & Session Control Bar -->
+        <div class="lecture-bar">
+            <div class="lecture-info">
+                <span class="lecture-glyph">📚</span>
+                <div class="lecture-text">
+                    <span class="lecture-subject" id="lecture-subject-label">Data Structures &amp; Algorithms</span>
+                    <span class="lecture-meta" id="lecture-meta-label">Prof. A. Sharma · Sem 3 CSE</span>
+                </div>
+            </div>
+            <div class="lecture-controls">
+                <select id="lecture-select" title="Switch active lecture"></select>
+                <button id="new-lecture-btn" class="btn-lecture" type="button">＋ New Lecture</button>
+            </div>
+        </div>
+
+        <!-- System Controls & Live Inference Status Bar -->
+        <div class="status-bar">
+            <span class="status-left">
+                <span id="status-dot" class="status-dot"></span>
+                <span id="status-text">Initializing AI Engine...</span>
+            </span>
+            <div class="status-controls">
+                <button id="open-modal-btn" class="btn-modal-trigger">＋ Enroll Student</button>
+                <button id="start-btn" disabled>▶ Start Camera</button>
+                <button id="stop-btn" class="btn-stop" style="display:none;">■ Stop Camera</button>
+                <button id="mode-btn" class="btn-mode" disabled>Mode: Single</button>
+                <button id="proxy-btn" class="btn-proxy" disabled>◎ Recognition: OFF</button>
+                <button id="liveness-btn" class="btn-liveness on" title="Toggle Anti-Spoofing & Blink Verification">🛡️ Anti-Spoof: ON</button>
+            </div>
+        </div>
+
+        <!-- Live Performance & Diagnostics Ribbon -->
+        <div id="perf-line" class="perf-ribbon">
+            <span>FACES: <strong id="perf-faces">0</strong></span> &nbsp;·&nbsp;
+            <span>LATENCY: <strong id="perf-latency">— ms</strong></span> &nbsp;·&nbsp;
+            <span>FPS: <strong id="perf-fps">—</strong></span> &nbsp;·&nbsp;
+            <span>LIVENESS: <strong id="perf-liveness" class="tag-live-ok">ACTIVE</strong></span> &nbsp;·&nbsp;
+            <span>ENGINE: <strong id="perf-backend">Local WebGL</strong></span>
+        </div>
+
+        <!-- Dynamic Metrics & Attendance Rate Strip -->
+        <div class="stat-strip">
+            <div class="stat-cell">
+                <div class="stat-label">Total Enrolled</div>
+                <div class="stat-value" id="stat-registered">0</div>
+                <div class="stat-sub">Students in class</div>
+            </div>
+            <div class="stat-cell present">
+                <div class="stat-label">Verified Present</div>
+                <div class="stat-value" id="stat-present">0</div>
+                <div class="stat-sub" id="stat-present-pct">0% Rate</div>
+            </div>
+            <div class="stat-cell alert">
+                <div class="stat-label">Absent / Pending</div>
+                <div class="stat-value" id="stat-absent">0</div>
+                <div class="stat-sub">Unmarked</div>
+            </div>
+            <div class="stat-cell info">
+                <div class="stat-label">Live In Frame</div>
+                <div class="stat-value" id="stat-live-faces">0</div>
+                <div class="stat-sub">Detected Faces</div>
+            </div>
+        </div>
+
+        <!-- Model Progress Bar -->
+        <div class="load-progress-wrap" id="load-progress-wrap">
+            <div id="load-progress-bar-bg"><div id="load-progress-bar"></div></div>
+        </div>
+
+        <!-- Main Camera & Feed Layout -->
+        <div class="main-layout">
+            <div id="camera-container">
+                <div class="empty-camera-hint">
+                    <span class="glyph">◎</span>
+                    <span class="hint-title">AI Camera Feed Standby</span>
+                    <span class="hint-sub">Click <strong>"Start Camera"</strong> or upload a test image to start instant attendance scanning.</span>
+                    <div class="camera-fallback-actions">
+                        <label for="test-image-input" class="btn-secondary-pill">🖼️ Test with Photo / File</label>
+                        <input type="file" id="test-image-input" accept="image/*" style="display:none;">
+                    </div>
+                </div>
+
+                <div class="rec-indicator" id="rec-indicator"><span class="dot"></span>SCANNING LIVE</div>
+                <div class="liveness-badge" id="liveness-badge">🛡️ Liveness Verified</div>
+                <div id="mismatch-alert">⚠ Unregistered Face Detected</div>
+                
+                <div id="success-toast">
+                    <div class="checkmark-icon">✓</div>
+                    <div class="toast-content">
+                        <span id="toast-text">Attendance Marked!</span>
+                        <span id="toast-sub">Match Confidence: 99.4%</span>
+                    </div>
+                </div>
+
+                <video id="live-video" autoplay playsinline muted></video>
+                <canvas id="recognition-canvas"></canvas>
+
+                <div class="viewfinder-frame" id="viewfinder-frame">
+                    <div class="corner tl"></div>
+                    <div class="corner tr"></div>
+                    <div class="corner bl"></div>
+                    <div class="corner br"></div>
+                    <div class="scan-line"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attendance Summary Log & Interactive Table -->
+        <div id="log-container">
+            <div class="log-header">
+                <div class="log-header-left">
+                    <h2 id="log-title">Student Attendance Roster</h2>
+                    <span class="session-badge" id="session-badge">Active Session</span>
+                </div>
+                <div class="table-tools">
+                    <div class="search-wrap">
+                        <input type="text" id="roster-search" placeholder="🔍 Search Name or PRN...">
+                    </div>
+                    <div class="filter-group">
+                        <button class="filter-btn active" data-filter="all">All (<span id="count-all">0</span>)</button>
+                        <button class="filter-btn" data-filter="present">Present (<span id="count-present">0</span>)</button>
+                        <button class="filter-btn" data-filter="absent">Absent (<span id="count-absent">0</span>)</button>
+                    </div>
+                    <div class="header-actions">
+                        <button id="report-modal-btn" class="btn-report">📄 View Report</button>
+                        <button id="export-btn" class="btn-export">📥 Export CSV</button>
+                        <button id="clear-btn" class="btn-clear">Clear Data</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-scroll-wrap">
+                <table id="attendance-table">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>PRN / Roll No</th>
+                            <th>Email</th>
+                            <th>Time Marked</th>
+                            <th>Status (Click to Toggle)</th>
+                            <th>Confidence</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log-body">
+                        <tr class="empty-row"><td colspan="7">No students registered yet. Click "＋ Enroll Student" or "⚡ Load Demo Data".</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         STUDENT SELF-SERVICE PORTAL VIEW
+         ========================================================================= -->
+    <div id="student-portal-view" class="portal-view">
+        <div class="student-dashboard-wrap">
+            <div class="student-header-card">
+                <div class="student-profile-info">
+                    <div class="student-avatar-big" id="student-portal-avatar">🎓</div>
+                    <div class="student-meta">
+                        <span class="student-eyebrow">Student Self-Service Portal</span>
+                        <h1 id="student-portal-name">Alex Rivera</h1>
+                        <p id="student-portal-prn">PRN: 1032210042 &nbsp;·&nbsp; B.Tech Computer Science &amp; Engineering</p>
+                    </div>
+                </div>
+                <div class="student-attendance-summary">
+                    <div class="stat-ring-wrap">
+                        <div class="stat-ring-value" id="student-portal-rate">100%</div>
+                        <span class="stat-ring-label">Overall Attendance</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Student Action & Courses Grid -->
+            <div class="student-courses-section">
+                <div class="section-title-row">
+                    <h2>Subject Attendance History</h2>
+                    <button id="download-slip-btn" class="btn-primary-action">🖨️ Download Attendance Certificate</button>
+                </div>
+                <div class="courses-grid" id="student-courses-grid">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         STUDENT ENROLLMENT MODAL (Live Webcam + Photo Upload Tabs)
+         ========================================================================= -->
+    <div id="registration-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-modal-btn">&times;</span>
+            <div class="modal-eyebrow">Biometric Enrollment</div>
+            <h2>Register Student</h2>
+            
+            <div class="modal-tabs">
+                <button class="modal-tab-btn active" id="tab-webcam-btn">📸 Live Webcam</button>
+                <button class="modal-tab-btn" id="tab-upload-btn">📁 Upload ID Photo</button>
+            </div>
+
+            <div class="form-group">
+                <label for="reg-name">Full Name *</label>
+                <input type="text" id="reg-name" placeholder="e.g. John Doe">
+            </div>
+            <div class="form-group">
+                <label for="reg-prn">PRN / Roll Number *</label>
+                <input type="text" id="reg-prn" placeholder="e.g. 1032210001">
+            </div>
+            <div class="form-group">
+                <label for="reg-email">Email Address *</label>
+                <input type="email" id="reg-email" placeholder="e.g. john@example.com">
+            </div>
+
+            <!-- Webcam Capture Section -->
+            <div id="enroll-webcam-section" class="enroll-mode-section active">
+                <p class="modal-hint">
+                    Look directly into the camera. Ensure good lighting and a clear view of your face.
+                </p>
+                <button id="register-btn" class="btn-primary-modal" disabled>◎ Capture &amp; Register Live Face</button>
+            </div>
+
+            <!-- Photo Upload Section -->
+            <div id="enroll-upload-section" class="enroll-mode-section">
+                <p class="modal-hint">
+                    Upload a high-resolution ID photo or portrait. The AI will extract facial features instantly.
+                </p>
+                <div class="dropzone" id="reg-photo-dropzone">
+                    <span class="dropzone-icon">🖼️</span>
+                    <span class="dropzone-text" id="dropzone-label">Click or Drag &amp; Drop Student Photo here</span>
+                    <input type="file" id="reg-photo-input" accept="image/*" style="display:none;">
+                    <img id="photo-preview" class="photo-preview" alt="Preview">
+                </div>
+                <button id="register-photo-btn" class="btn-primary-modal" disabled>◎ Enroll from Selected Photo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         NEW LECTURE MODAL
+         ========================================================================= -->
+    <div id="lecture-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-lecture-modal-btn">&times;</span>
+            <div class="modal-eyebrow">Class Session Setup</div>
+            <h2>Create New Lecture Session</h2>
+            <p class="modal-hint">
+                Configure subject, instructor, and batch section for real-time tracking.
+            </p>
+            <div class="form-group">
+                <label for="lec-subject">Subject / Course Name *</label>
+                <input type="text" id="lec-subject" placeholder="e.g. Cloud Computing &amp; DevOps">
+            </div>
+            <div class="form-group">
+                <label for="lec-professor">Professor / Instructor *</label>
+                <input type="text" id="lec-professor" placeholder="e.g. Dr. Rajesh K.">
+            </div>
+            <div class="form-group">
+                <label for="lec-section">Batch / Section (Optional)</label>
+                <input type="text" id="lec-section" placeholder="e.g. CSE - Batch A3">
+            </div>
+            <button id="create-lecture-btn" class="btn-primary-modal" type="button">◎ Create &amp; Activate Session</button>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         PRINTABLE REPORT & AUDIT SHEET MODAL
+         ========================================================================= -->
+    <div id="report-modal" class="modal">
+        <div class="modal-content report-modal-content">
+            <span class="close-modal" id="close-report-modal-btn">&times;</span>
+            <div class="report-print-header">
+                <div class="report-logo">
+                    <h2>MARKIFY · ACADEMIC ATTENDANCE AUDIT</h2>
+                    <span class="report-sub" id="report-meta-timestamp">Generated: 2026-08-22</span>
+                </div>
+                <div class="report-actions">
+                    <button class="btn-primary-action" onclick="window.print()">🖨️ Print / Save PDF</button>
+                </div>
+            </div>
+            
+            <div class="report-info-box">
+                <div><strong>Subject:</strong> <span id="rep-subject">—</span></div>
+                <div><strong>Faculty:</strong> <span id="rep-professor">—</span></div>
+                <div><strong>Section:</strong> <span id="rep-section">—</span></div>
+                <div><strong>Attendance Rate:</strong> <span id="rep-rate">—</span></div>
+            </div>
+
+            <div class="report-table-wrap">
+                <table class="report-table" id="report-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Student Name</th>
+                            <th>PRN</th>
+                            <th>Email</th>
+                            <th>Time Verified</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="report-table-body">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         LOGIN & AUTHENTICATION MODAL
+         ========================================================================= -->
+    <div id="auth-modal" class="modal">
+        <div class="modal-content auth-modal-content">
+            <span class="close-modal" id="close-auth-modal-btn">&times;</span>
+            <div class="auth-header">
+                <span class="modal-eyebrow">Markify Identity &amp; Access</span>
+                <h2>Select Portal Login</h2>
+                <p class="modal-hint">Choose your role to access role-specific features:</p>
+            </div>
+
+            <div class="auth-role-cards">
+                <div class="auth-card active" id="auth-card-faculty">
+                    <div class="auth-card-icon">👨‍🏫</div>
+                    <h3>Faculty / Professor</h3>
+                    <p>Start live AI scanner, register students, configure lectures, view diagnostics &amp; export logs.</p>
+                    <button class="btn-auth-action" id="login-faculty-btn">Login as Faculty</button>
+                </div>
+                <div class="auth-card" id="auth-card-student">
+                    <div class="auth-card-icon">🎓</div>
+                    <h3>Student Portal</h3>
+                    <p>Check personal attendance across all subjects, verify records &amp; print attendance certificates.</p>
+                    <button class="btn-auth-action secondary" id="login-student-btn">Login as Student</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shortcuts Helper Floating Pill -->
+    <div class="shortcuts-pill" title="Keyboard Shortcuts for Demo:
+Space: Start/Pause Scanner
+R: Enroll Student
+M: Toggle Single/Group Mode
+L: Toggle Anti-Spoofing
+D: Quick Load Demo Data">
+        ⌨️ Shortcuts: [Space] Scan &nbsp;·&nbsp; [R] Enroll &nbsp;·&nbsp; [M] Mode &nbsp;·&nbsp; [D] Demo
+    </div>
+
+    <!-- Core Script -->
+    <script src="script.js"></script>
+</body>
+</html>
