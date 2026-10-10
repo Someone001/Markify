@@ -83,7 +83,7 @@ const LINK_SELECTOR =
     '[aria-label~="trail{link}"],[data-framer-name~="trail{link}"]';
 const RING_SELECTOR = 'a,button,[role="button"],input,select,textarea';
 
-function __OriginkitBase_DotCursor(props: Props) {
+function BaseDotCursor(props: Props) {
     const {
         headColor = DEFAULTS.headColor,
         trailColor = DEFAULTS.trailColor,
@@ -476,5 +476,5 @@ const __originkitPresetProps = {
 };
 
 export default function DotCursor(props: Record<string, unknown>) {
-  return <__OriginkitBase_DotCursor {...(__originkitPresetProps as Record<string, unknown>)} {...props} />;
+  return <BaseDotCursor {...(__originkitPresetProps as Record<string, unknown>)} {...props} />;
 }
