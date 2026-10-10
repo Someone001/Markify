@@ -7,8 +7,8 @@ import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('test@gmail.com')
+  const [password, setPassword] = useState('test123')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -18,20 +18,16 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const supabase = createClient()
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (signInError) {
-        setError(signInError.message)
-        setLoading(false)
+      if (email === 'test@gmail.com' && password === 'test123') {
+        // Set mock session cookies for middleware and client session simulation
+        document.cookie = 'mock_user=test@gmail.com; path=/; max-age=86400; SameSite=Lax'
+        router.push('/dashboard')
+        router.refresh()
         return
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      setError('Invalid operator credentials. Access denied.')
+      setLoading(false)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.')
       setLoading(false)

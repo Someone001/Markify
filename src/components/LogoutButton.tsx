@@ -11,6 +11,7 @@ export default function LogoutButton() {
   const handleLogout = async () => {
     setLoading(true)
     try {
+      document.cookie = 'mock_user=; path=/; max-age=0; SameSite=Lax'
       const supabase = createClient()
       await supabase.auth.signOut()
       router.push('/login')

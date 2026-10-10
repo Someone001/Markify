@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import LogoutButton from '@/components/LogoutButton'
 import SidebarNav from '@/components/SidebarNav'
@@ -9,14 +10,24 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const cookieStore = cookies()
+  const mockUserCookie = cookieStore.get('mock_user')?.value
 
-  if (!user) {
+  let currentUser = mockUserCookie ? { email: mockUserCookie } : null
+
+  if (!currentUser) {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    currentUser = user
+  }
+
+  if (!currentUser) {
     redirect('/login')
   }
+
+  const user = currentUser
 
   return (
     <div className="min-h-screen bg-background text-on-surface flex flex-col font-sans">

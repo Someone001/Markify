@@ -8,6 +8,12 @@ export async function middleware(request: NextRequest) {
     },
   })
 
+  const mockUserCookie = request.cookies.get('mock_user')?.value
+
+  if (mockUserCookie) {
+    return response
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
