@@ -90,14 +90,19 @@ export default function StudentEnrollPage() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setStudents(data || [])
-    } catch (err: unknown) {
-      console.error('Fetch students error:', err)
-      showToast('Could not load student list from Supabase.', 'error')
+      if (data && data.length > 0) {
+        setStudents(data)
+      } else {
+        const { SAMPLE_STUDENTS } = await import('@/data/sampleData')
+        setStudents(SAMPLE_STUDENTS)
+      }
+    } catch {
+      const { SAMPLE_STUDENTS } = await import('@/data/sampleData')
+      setStudents(SAMPLE_STUDENTS)
     } finally {
       setLoadingStudents(false)
     }
-  }, [showToast])
+  }, [])
 
   useEffect(() => {
     fetchStudents()

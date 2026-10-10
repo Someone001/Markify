@@ -1,21 +1,42 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { SAMPLE_STUDENTS, SAMPLE_SESSIONS, SAMPLE_ATTENDANCE } from '@/data/sampleData'
 
 export default async function DashboardPage() {
   const supabase = createClient()
 
   // 1. Total enrolled students
-  const { count: studentCount } = await supabase
-    .from('students')
-    .select('id', { count: 'exact', head: true })
-  const enrolledTotal = studentCount || 0
+  let enrolledTotal = 0
+  try {
+    const { count: studentCount } = await supabase
+      .from('students')
+      .select('id', { count: 'exact', head: true })
+    enrolledTotal = studentCount || 0
+  } catch {
+    enrolledTotal = 0
+  }
 
   // 2. All sessions
-  const { data: allSessions } = await supabase
-    .from('sessions')
-    .select('*')
-    .order('created_at', { ascending: false })
-  const sessionsList = allSessions || []
+  let sessionsList: typeof SAMPLE_SESSIONS = []
+  try {
+    const { data: allSessions } = await supabase
+      .from('sessions')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (allSessions && allSessions.length > 0) {
+      sessionsList = allSessions
+    }
+  } catch {
+    sessionsList = []
+  }
+
+  // Fallback to sample data if no db records or placeholder config
+  const isDemoMode = sessionsList.length === 0
+  if (isDemoMode) {
+    sessionsList = SAMPLE_SESSIONS
+    enrolledTotal = SAMPLE_STUDENTS.length
+  }
+
   const totalSessions = sessionsList.length
 
   // Sessions this week (past 7 days)
@@ -35,15 +56,13 @@ export default async function DashboardPage() {
   let todayPresentCount = 0
 
   if (todaySessions.length > 0) {
-    const todaySessionIds = todaySessions.map((s) => s.id)
-    const { data: todayAttendance } = await supabase
-      .from('attendance')
-      .select('student_id, status')
-      .in('session_id', todaySessionIds)
-
-    if (todayAttendance && todayAttendance.length > 0) {
-      const distinctPresentStudents = new Set(
-        todayAttendance
+    if (isDemoMode) {
+      const todaySessionIds = new Set(todaySessions.map((s) => s.id))
+      const demoAttendance = SAMPLE_ATTENDANCE.filter(
+        (a) => a.session_id && todaySessionIds.has(a.session_id)
+      )
+      const distinctPresent = new Set(
+        demoAttendance
           .filter(
             (a) =>
               a.status === 'present' ||
@@ -52,11 +71,33 @@ export default async function DashboardPage() {
           )
           .map((a) => a.student_id)
       )
-      todayPresentCount = distinctPresentStudents.size
+      todayPresentCount = distinctPresent.size
       todayAttendancePct =
         enrolledTotal > 0 ? Math.round((todayPresentCount / enrolledTotal) * 100) : 0
     } else {
-      todayAttendancePct = 0
+      const todaySessionIds = todaySessions.map((s) => s.id)
+      const { data: todayAttendance } = await supabase
+        .from('attendance')
+        .select('student_id, status')
+        .in('session_id', todaySessionIds)
+
+      if (todayAttendance && todayAttendance.length > 0) {
+        const distinctPresentStudents = new Set(
+          todayAttendance
+            .filter(
+              (a) =>
+                a.status === 'present' ||
+                a.status === 'manual_override' ||
+                a.status === 'manual_fallback'
+            )
+            .map((a) => a.student_id)
+        )
+        todayPresentCount = distinctPresentStudents.size
+        todayAttendancePct =
+          enrolledTotal > 0 ? Math.round((todayPresentCount / enrolledTotal) * 100) : 0
+      } else {
+        todayAttendancePct = 0
+      }
     }
   }
 

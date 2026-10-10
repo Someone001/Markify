@@ -34,9 +34,15 @@ export default function SessionIndexPage() {
         .limit(20)
 
       if (fetchErr) throw fetchErr
-      setSessions(data || [])
-    } catch (err: unknown) {
-      console.error('Error fetching sessions:', err)
+      if (data && data.length > 0) {
+        setSessions(data)
+      } else {
+        const { SAMPLE_SESSIONS } = await import('@/data/sampleData')
+        setSessions(SAMPLE_SESSIONS)
+      }
+    } catch {
+      const { SAMPLE_SESSIONS } = await import('@/data/sampleData')
+      setSessions(SAMPLE_SESSIONS)
     } finally {
       setLoadingSessions(false)
     }
