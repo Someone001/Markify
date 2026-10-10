@@ -1,0 +1,227 @@
+/* Stitch Biometric Intelligence Studio Design Tokens */
+:root {
+  /* Surface & Background */
+  --color-bg: #111319;
+  --color-surface: #111319;
+  --color-surface-dim: #111319;
+  --color-surface-container-lowest: #0c0e13;
+  --color-surface-container-low: #191c21;
+  --color-surface-container: #1d2025;
+  --color-surface-container-high: #282a30;
+  --color-surface-container-highest: #33353b;
+  --color-surface-variant: #33353b;
+  --color-surface-bright: #37393f;
+
+  /* Typography / Text Content */
+  --color-on-background: #e2e2ea;
+  --color-on-surface: #e2e2ea;
+  --color-on-surface-variant: #c4c9ac;
+  --color-outline: #8e9379;
+  --color-outline-variant: #444933;
+
+  /* Brand Signature Neon Primary (Electric Acid Lime) */
+  --color-primary: #ffffff;
+  --color-primary-fixed: #c3f400;
+  --color-primary-fixed-dim: #abd600;
+  --color-primary-container: #c3f400;
+  --color-on-primary-fixed: #161e00;
+  --color-on-primary-container: #556d00;
+  --color-surface-tint: #abd600;
+
+  /* Secondary Accent (Cybernetic Cyan) */
+  --color-secondary: #d3fbff;
+  --color-secondary-fixed: #7df4ff;
+  --color-secondary-container: #00eefc;
+  --color-on-secondary-container: #00686f;
+
+  /* Tertiary In-Progress / Resolving Accent (Hot Magenta) */
+  --color-magenta: #ff007f;
+  --color-magenta-dim: #cc0066;
+  --color-magenta-container: rgba(255, 0, 127, 0.15);
+
+  /* Status Colors */
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+  --color-on-error: #690005;
+  --color-on-error-container: #ffdad6;
+}
+
+/* Reticle Corner Brackets Utility */
+.reticle-box {
+  position: relative;
+}
+
+.reticle-box::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  border-top: 2px solid var(--color-primary-fixed);
+  border-left: 2px solid var(--color-primary-fixed);
+  filter: drop-shadow(0 0 4px #c3f400);
+}
+
+.reticle-box::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border-bottom: 2px solid var(--color-primary-fixed);
+  border-right: 2px solid var(--color-primary-fixed);
+  filter: drop-shadow(0 0 4px #c3f400);
+}
+
+/* Scanning Horizontal Laser Beam */
+@keyframes scanline {
+  0% {
+    top: -5%;
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.95;
+  }
+  85% {
+    opacity: 0.95;
+  }
+  100% {
+    top: 105%;
+    opacity: 0;
+  }
+}
+
+.animate-scanline {
+  animation: scanline 3.2s ease-in-out infinite;
+}
+
+/* Pulse Glow Keyframes */
+@keyframes pulse-glow-lime {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(195, 244, 0, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(195, 244, 0, 0.8), 0 0 4px #c3f400;
+  }
+}
+
+@keyframes pulse-glow-cyan {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(0, 238, 252, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(0, 238, 252, 0.8), 0 0 4px #00eefc;
+  }
+}
+
+@keyframes pulse-glow-magenta {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(255, 0, 127, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(255, 0, 127, 0.8), 0 0 4px #ff007f;
+  }
+}
+
+.animate-pulse-lime {
+  animation: pulse-glow-lime 2s ease-in-out infinite;
+}
+
+.animate-pulse-cyan {
+  animation: pulse-glow-cyan 2s ease-in-out infinite;
+}
+
+.animate-pulse-magenta {
+  animation: pulse-glow-magenta 2s ease-in-out infinite;
+}
+
+/* Reticle Pulse Glows */
+.glow-lime {
+  box-shadow: 0 0 16px rgba(195, 244, 0, 0.45);
+}
+
+.glow-lime-lg {
+  box-shadow: 0 0 28px rgba(195, 244, 0, 0.65), 0 0 8px #c3f400;
+}
+
+.glow-cyan {
+  box-shadow: 0 0 16px rgba(0, 238, 252, 0.45);
+}
+
+.glow-cyan-lg {
+  box-shadow: 0 0 28px rgba(0, 238, 252, 0.65), 0 0 8px #00eefc;
+}
+
+.glow-magenta {
+  box-shadow: 0 0 16px rgba(255, 0, 127, 0.5);
+}
+
+.glow-magenta-lg {
+  box-shadow: 0 0 28px rgba(255, 0, 127, 0.7), 0 0 8px #ff007f;
+}
+
+.glow-red {
+  box-shadow: 0 0 16px rgba(255, 180, 171, 0.5);
+}
+
+/* Vivid Text Glows */
+.text-glow-lime {
+  text-shadow: 0 0 14px rgba(195, 244, 0, 0.65), 0 0 28px rgba(195, 244, 0, 0.35);
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 14px rgba(0, 238, 252, 0.65), 0 0 28px rgba(0, 238, 252, 0.35);
+}
+
+.text-glow-magenta {
+  text-shadow: 0 0 14px rgba(255, 0, 127, 0.7);
+}
+
+/* Interactive Card & Button Hover Transitions */
+.card-interactive {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  background: radial-gradient(circle at top right, rgba(195, 244, 0, 0.05), transparent 55%), radial-gradient(circle at bottom left, rgba(0, 238, 252, 0.04), transparent 50%), #0c0e13;
+}
+
+.card-interactive:hover {
+  transform: translateY(-2px) scale(1.015);
+  border-color: rgba(195, 244, 0, 0.5) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8), 0 0 22px rgba(195, 244, 0, 0.25) !important;
+}
+
+.card-interactive-cyan:hover {
+  transform: translateY(-2px) scale(1.015);
+  border-color: rgba(0, 238, 252, 0.5) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8), 0 0 22px rgba(0, 238, 252, 0.25) !important;
+}
+
+/* Laser sweep bar with gradient core */
+.laser-beam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(195, 244, 0, 0.2) 20%, #c3f400 50%, rgba(195, 244, 0, 0.2) 80%, transparent 100%);
+  box-shadow: 0 0 14px #c3f400, 0 0 28px rgba(195, 244, 0, 0.7);
+  pointer-events: none;
+  z-index: 25;
+  animation: scanline 3.2s ease-in-out infinite;
+}
+
+/* Custom Clean Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0c0e13;
+}
+::-webkit-scrollbar-thumb {
+  background: #282a30;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c3f400;
+}
