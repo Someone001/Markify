@@ -21,7 +21,6 @@ import { SAMPLE_STUDENTS, SAMPLE_SESSIONS, SAMPLE_ATTENDANCE } from '@/data/samp
 
 export default function AnalyticsPage() {
   const [mounted, setMounted] = useState(false)
-  const [loading, setLoading] = useState(false)
   const [sessions, setSessions] = useState<Session[]>(SAMPLE_SESSIONS)
   const [selectedSessionId, setSelectedSessionId] = useState<string>(SAMPLE_SESSIONS[0]?.id || '')
   const [students, setStudents] = useState<Student[]>(SAMPLE_STUDENTS)
@@ -346,13 +345,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="card-interactive bg-surface-container-high border border-outline-variant/40 rounded-2xl py-24 text-center text-xs font-mono text-on-surface-variant space-y-3 shadow-xl">
-          <div className="animate-spin text-3xl inline-block text-primary shadow-[0_0_12px_#c3f400]">⏳</div>
-          <p className="text-white font-bold uppercase tracking-wider">Compiling attendance analytics telemetry from database...</p>
-          <p className="text-primary text-[11px] animate-pulse">CRYPTOGRAPHIC LEDGER SYNC IN PROGRESS</p>
-        </div>
-      ) : sessions.length === 0 ? (
+      {sessions.length === 0 ? (
         <div className="card-interactive py-24 text-center p-8 bg-surface-container-high border border-outline-variant/40 rounded-2xl space-y-4 shadow-xl">
           <div className="text-4xl text-primary drop-shadow-[0_0_12px_#c3f400]">📊</div>
           <h2 className="font-display text-base font-bold text-white uppercase tracking-tight">No Attendance Sessions Found</h2>
